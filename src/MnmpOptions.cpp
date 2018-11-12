@@ -24,6 +24,8 @@ DEFINE_string(R, "",
 
 DEFINE_string(output_dir, "./",
                 "output directory for SAM/BAM files");   
+DEFINE_bool(bam, false,
+                "output in BAM format");
 
 int fc_set_opt() {
   mm_idxopt_init(g_mnmpIpt);

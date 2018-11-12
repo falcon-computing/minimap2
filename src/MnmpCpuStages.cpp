@@ -13,6 +13,8 @@
 #include "mmpriv.h"
 #include "kalloc.h"
 
+#include "htslib/sam.h"
+
 
 void SeqsRead::compute() {
   // Config reading param
@@ -293,12 +295,29 @@ int SeqsWrite::compute(AlignsBatch const &i_alignsBatch) {
     km = km_init();
   kstring_t l_outputStrBuf = {0, 0, 0};
 
+  // Output File
   std::stringstream l_outputFname;
   l_outputFname << FLAGS_output_dir << "/part-"
                 << std::setw(6) << std::setfill('0') << i_alignsBatch.m_batchIdx << ".log";
-  std::ofstream l_outputFp(l_outputFname.str());
+  std::ofstream l_outputFp;
+  samFile      *l_bamOutputFp;
+  if (FLAGS_bam) {
+    l_bamOutputFp = sam_open(l_outputFname.str().c_str(), "wb0");
+  }
+  else {
+    l_outputFp.open(l_outputFname.str());
+  }
+
   // Write headers
-  l_outputFp << fc_write_sam_hdr(mi, FLAGS_R, VERSION, m_cmdInfo);
+  int l_retCode;
+  bam_hdr_t *l_bamHeader = NULL;
+  if (FLAGS_bam) {
+    std::string l_headerStr = fc_write_sam_hdr(mi, FLAGS_R, VERSION, m_cmdInfo);
+    l_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
+    l_retCode = sam_hdr_write(l_bamOutputFp, l_bamHeader);
+  }
+  else
+    l_outputFp << fc_write_sam_hdr(mi, FLAGS_R, VERSION, m_cmdInfo);
   
   // Write records
   for (int k = 0; k < i_alignsBatch.m_numFrag; ++k) {
@@ -328,21 +347,39 @@ int SeqsWrite::compute(AlignsBatch const &i_alignsBatch) {
       	  assert(!r->sam_pri || r->id == r->parent);
       	  if ((g_mnmpOpt->flag & MM_F_NO_PRINT_2ND) && r->id != r->parent)
       	    continue;
-      	  if (g_mnmpOpt->flag & MM_F_OUT_SAM)
+          if (FLAGS_bam) {
       	    mm_write_sam2(&l_outputStrBuf, mi, t, i - seg_st, j, i_alignsBatch.m_numSeg[k], &i_alignsBatch.m_numReg[seg_st], (const mm_reg1_t*const*)&i_alignsBatch.m_reg[seg_st], km, g_mnmpOpt->flag);
-      	  else
-      	    mm_write_paf(&l_outputStrBuf, mi, t, r, km, g_mnmpOpt->flag);
-      	  //mm_err_puts(l_outputStrBuf.s);
-      	  l_outputFp << l_outputStrBuf.s << std::endl;
+            bam1_t *l_bam = bam_init1();
+            l_retCode = sam_parse1(&l_outputStrBuf, l_bamHeader, l_bam);
+            l_retCode = sam_write1(l_bamOutputFp, l_bamHeader, l_bam);
+            bam_destroy1(l_bam);
+          }
+      	  else {
+            if (g_mnmpOpt->flag & MM_F_OUT_SAM)
+      	      mm_write_sam2(&l_outputStrBuf, mi, t, i - seg_st, j, i_alignsBatch.m_numSeg[k], &i_alignsBatch.m_numReg[seg_st], (const mm_reg1_t*const*)&i_alignsBatch.m_reg[seg_st], km, g_mnmpOpt->flag);
+      	    else
+      	      mm_write_paf(&l_outputStrBuf, mi, t, r, km, g_mnmpOpt->flag);
+      	    //mm_err_puts(l_outputStrBuf.s);
+      	    l_outputFp << l_outputStrBuf.s << std::endl;
+          }
       	}
       }
       else if (g_mnmpOpt->flag & (MM_F_OUT_SAM|MM_F_PAF_NO_HIT)) { // output an empty hit, if requested
-      	if (g_mnmpOpt->flag & MM_F_OUT_SAM)
+        if (FLAGS_bam) {
       	  mm_write_sam2(&l_outputStrBuf, mi, t, i - seg_st, -1, i_alignsBatch.m_numSeg[k], &i_alignsBatch.m_numReg[seg_st], (const mm_reg1_t*const*)&i_alignsBatch.m_reg[seg_st], km, g_mnmpOpt->flag);
-      	else
-          mm_write_paf(&l_outputStrBuf, mi, t, 0, 0, g_mnmpOpt->flag);
-      	//mm_err_puts(l_outputStrBuf.s);
-      	l_outputFp << l_outputStrBuf.s << std::endl;
+          bam1_t *l_bam = bam_init1();
+          l_retCode = sam_parse1(&l_outputStrBuf, l_bamHeader, l_bam);
+          l_retCode = sam_write1(l_bamOutputFp, l_bamHeader, l_bam);
+          bam_destroy1(l_bam);
+        }
+      	else {
+          if (g_mnmpOpt->flag & MM_F_OUT_SAM)
+      	    mm_write_sam2(&l_outputStrBuf, mi, t, i - seg_st, -1, i_alignsBatch.m_numSeg[k], &i_alignsBatch.m_numReg[seg_st], (const mm_reg1_t*const*)&i_alignsBatch.m_reg[seg_st], km, g_mnmpOpt->flag);
+      	  else
+            mm_write_paf(&l_outputStrBuf, mi, t, 0, 0, g_mnmpOpt->flag);
+      	  //mm_err_puts(l_outputStrBuf.s);
+      	  l_outputFp << l_outputStrBuf.s << std::endl;
+        }
       }
     }
     for (int i = seg_st; i < seg_en; ++i) {
@@ -367,6 +404,11 @@ int SeqsWrite::compute(AlignsBatch const &i_alignsBatch) {
   km_destroy(km);
   if (mm_verbose >= 3)
     fprintf(stderr, "[M::%s::%.3f*%.2f] mapped %d sequences\n", __func__, realtime() - mm_realtime0, cputime() / (realtime() - mm_realtime0), i_alignsBatch.m_numSeq);
+
+  if (FLAGS_bam) {
+    bam_hdr_destroy(l_bamHeader);
+    l_retCode = sam_close(l_bamOutputFp);
+  }
 
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished SeqsWrite";
 

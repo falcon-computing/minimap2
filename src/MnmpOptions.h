@@ -17,6 +17,7 @@ DECLARE_int32(t);
 DECLARE_string(R);
 
 DECLARE_string(output_dir);
+DECLARE_bool(bam);
 
 int fc_set_opt(void);
 
