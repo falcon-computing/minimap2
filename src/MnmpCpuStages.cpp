@@ -76,7 +76,7 @@ void SeqsRead::compute() {
 
     o_seqsBatch.m_numFrag = 0;
     for (int i = 1, j = 0; i <= o_seqsBatch.m_numSeq; i++) {
-      if (i == o_seqsBatch.m_numSeq                                              ||
+      if (i == o_seqsBatch.m_numSeq                                               ||
           !l_fragMode                                                             ||
           !mm_qname_same(o_seqsBatch.m_seqs[i-1].name, o_seqsBatch.m_seqs[i].name)  ) {
         o_seqsBatch.m_numSeg[o_seqsBatch.m_numFrag] = i - j;
@@ -86,6 +86,7 @@ void SeqsRead::compute() {
     }
 
     DLOG_IF(INFO, VLOG_IS_ON(3)) << "Read " << o_seqsBatch.m_numSeq << " sequences";
+    DLOG_IF(INFO, VLOG_IS_ON(4)) << "#Frag: " << o_seqsBatch.m_numFrag << ", #Segm: " << o_seqsBatch.m_numSeg[0];
     DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished SeqsRead";
 
     this->pushOutput(o_seqsBatch);
@@ -163,44 +164,43 @@ AlignsBatch MinimapOriginMap::compute(SeqsBatch const &i_seqsBatch) {
 ChainsBatch MinimapChain::compute(SeqsBatch const &i_seqsBatch) {
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started MinimapChain";
 
-  mm_tbuf_t **l_tbufArr = (mm_tbuf_t **)malloc(i_seqsBatch.m_numFrag * sizeof(mm_tbuf_t *));
-  int *l_qlens = (int *)malloc(i_seqsBatch.m_numFrag * i_seqsBatch.m_numSeg[0] * sizeof(int));
+  fragExtSOA *l_fragExtSOA = createFragmentExtensionSOA(i_seqsBatch.m_numFrag);
+  if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
+    l_fragExtSOA = createFragmentExtensionSOA(i_seqsBatch.m_numSeq);
+  }
+  else {
+    l_fragExtSOA = createFragmentExtensionSOA(i_seqsBatch.m_numFrag);
+  }
   for (int l_fr = 0; l_fr < i_seqsBatch.m_numFrag; l_fr++) {
-    mm_tbuf_t *b = mm_tbuf_init();
-    int *qlens = &l_qlens[l_fr*i_seqsBatch.m_numSeg[0]];
-    int off = i_seqsBatch.m_segOff[l_fr], pe_ori = g_mnmpOpt->pe_ori;
+    int l_segOff = i_seqsBatch.m_segOff[l_fr], pe_ori = g_mnmpOpt->pe_ori;
+    int qlens[MM_MAX_SEG];
     const char *qseqs[MM_MAX_SEG];
     assert(i_seqsBatch.m_numSeg[l_fr] <= MM_MAX_SEG);
-    if (mm_dbg_flag & MM_DBG_PRINT_QNAME)
-      DLOG(INFO) << "QR\t" << i_seqsBatch.m_seqs[off].name << "\t" << getTid() << "\t" << i_seqsBatch.m_seqs[off].l_seq;
+    //if (mm_dbg_flag & MM_DBG_PRINT_QNAME)
+    //  DLOG(INFO) << "QR\t" << i_seqsBatch.m_seqs[l_segOffset].name << "\t" << getTid() << "\t" << i_seqsBatch.m_seqs[l_segOffset].l_seq;
 
     for (int l_sg = 0; l_sg < i_seqsBatch.m_numSeg[l_fr]; ++l_sg) {
       if (i_seqsBatch.m_numSeg[l_fr] == 2 && ((l_sg == 0 && (pe_ori>>1&1)) || (l_sg == 1 && (pe_ori&1))))
-        mm_revcomp_bseq(&i_seqsBatch.m_seqs[off + l_sg]);
-      qlens[l_sg] = i_seqsBatch.m_seqs[off + l_sg].l_seq;
-      qseqs[l_sg] = i_seqsBatch.m_seqs[off + l_sg].seq;
+        mm_revcomp_bseq(&i_seqsBatch.m_seqs[l_segOff + l_sg]);
+      qlens[l_sg] = i_seqsBatch.m_seqs[l_segOff + l_sg].l_seq;
+      qseqs[l_sg] = i_seqsBatch.m_seqs[l_segOff + l_sg].seq;
     }
 
     if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
       for (int l_sg = 0; l_sg < i_seqsBatch.m_numSeg[l_fr]; ++l_sg) {
-        //fc_map_frag_chain(g_minimizer, 1, &qlens[l_sg], &qseqs[l_sg], &i_seqsBatch.m_numReg[off+l_sg], &i_seqsBatch.m_reg[off+l_sg], b, g_mnmpOpt, i_seqsBatch.m_seqs[off+l_sg].name);
-        mm_map_frag(g_minimizer, 1, &qlens[l_sg], &qseqs[l_sg], &i_seqsBatch.m_numReg[off+l_sg], &i_seqsBatch.m_reg[off+l_sg], b, g_mnmpOpt, i_seqsBatch.m_seqs[off+l_sg].name);
+        int l_repLen, l_fragGap;
+        fc_map_frag_chain(g_mnmpOpt, g_minimizer, l_segOff+l_sg, 1, &qlens[l_sg], &qseqs[l_sg], &i_seqsBatch.m_numReg[l_segOff+l_sg], &i_seqsBatch.m_reg[l_segOff+l_sg], i_seqsBatch.m_seqs[l_segOff+l_sg].name, l_fragExtSOA, &l_repLen, &l_fragGap);
+        i_seqsBatch.m_repLen[l_segOff + l_sg] = l_repLen;
+        i_seqsBatch.m_fragGap[l_segOff + l_sg] = l_fragGap;
       }
     } else {
-      //fc_map_frag_chain(g_minimizer, i_seqsBatch.m_numSeg[l_fr], qlens, qseqs, &i_seqsBatch.m_numReg[off], &i_seqsBatch.m_reg[off], b, g_mnmpOpt, i_seqsBatch.m_seqs[off].name);
-      int l_n_regs0, l_qlen_sum;
-      uint32_t l_hash;
-      uint64_t *l_u, *l_mini_pos;
-      mm_reg1_t *l_regs0;
-      mm128_t *l_a;
-      mm128_v l_mv;
-
-      mm_map_frag_chain(g_minimizer, i_seqsBatch.m_numSeg[l_fr], qlens, qseqs, &i_seqsBatch.m_numReg[off], &i_seqsBatch.m_reg[off], b, g_mnmpOpt, i_seqsBatch.m_seqs[off].name,
-                        &l_u, &l_mini_pos, &l_hash, &l_regs0, &l_n_regs0, &l_a, &l_mv, &l_qlen_sum);
-      mm_map_frag_align(g_minimizer, i_seqsBatch.m_numSeg[l_fr], qlens, qseqs, &i_seqsBatch.m_numReg[off], &i_seqsBatch.m_reg[off], b, g_mnmpOpt, i_seqsBatch.m_seqs[off].name,
-                        l_u, l_mini_pos, l_hash, l_regs0, l_n_regs0, l_a, l_mv, l_qlen_sum);
+      int l_repLen, l_fragGap;
+      fc_map_frag_chain(g_mnmpOpt, g_minimizer, l_fr, i_seqsBatch.m_numSeg[l_fr], qlens, qseqs, &i_seqsBatch.m_numReg[l_segOff], &i_seqsBatch.m_reg[l_segOff], i_seqsBatch.m_seqs[l_segOff].name, l_fragExtSOA, &l_repLen, &l_fragGap);
+      for (int l_sg = 0; l_sg < i_seqsBatch.m_numSeg[l_fr]; ++l_sg) {
+        i_seqsBatch.m_repLen[l_segOff + l_sg] = l_repLen;
+        i_seqsBatch.m_fragGap[l_segOff + l_sg] = l_fragGap;
+      }
     }
-    l_tbufArr[l_fr] = b;
   }
 
   ChainsBatch o_chainsBatch;
@@ -217,8 +217,7 @@ ChainsBatch MinimapChain::compute(SeqsBatch const &i_seqsBatch) {
   o_chainsBatch.m_repLen      = i_seqsBatch.m_repLen;
   o_chainsBatch.m_fragGap     = i_seqsBatch.m_fragGap;
 
-  o_chainsBatch.m_buf        = l_tbufArr;
-  o_chainsBatch.m_qlens      = l_qlens;
+  o_chainsBatch.m_fragExtSOA  = l_fragExtSOA;
 
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished MinimapChain";
 
@@ -228,30 +227,34 @@ ChainsBatch MinimapChain::compute(SeqsBatch const &i_seqsBatch) {
 AlignsBatch MinimapAlign::compute(ChainsBatch const &i_chainsBatch) {
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started MinimapAlign";
 
+  fragExtSOA *l_fragExtSOA = i_chainsBatch.m_fragExtSOA;
   for (int l_fr = 0; l_fr < i_chainsBatch.m_numFrag; l_fr++) {
-    mm_tbuf_t *b = i_chainsBatch.m_buf[l_fr];
-    int *qlens = &i_chainsBatch.m_qlens[l_fr*i_chainsBatch.m_numSeg[0]];
-    int off = i_chainsBatch.m_segOff[l_fr], pe_ori = g_mnmpOpt->pe_ori;
+    int l_segOff = i_chainsBatch.m_segOff[l_fr], pe_ori = g_mnmpOpt->pe_ori;
+    int qlens[MM_MAX_SEG];
+    const char *qseqs[MM_MAX_SEG];
+    for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {
+      qlens[l_sg] = i_chainsBatch.m_seqs[l_segOff + l_sg].l_seq;
+      qseqs[l_sg] = i_chainsBatch.m_seqs[l_segOff + l_sg].seq;
+    }
+
     if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
       for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {
-        //fc_map_frag_align(g_minimizer, 1, &qlens[l_sg], &qseqs[l_sg], &i_chainsBatch.m_numReg[off+l_sg], &i_chainsBatch.m_reg[off+l_sg], b, g_mnmpOpt, i_chainsBatch.m_seqs[off+l_sg].name);
-        i_chainsBatch.m_repLen[off + l_sg] = b->rep_len;
-        i_chainsBatch.m_fragGap[off + l_sg] = b->frag_gap;
+        int l_repLen = i_chainsBatch.m_repLen[l_segOff + l_sg];
+        int l_fragGap = i_chainsBatch.m_fragGap[l_segOff + l_sg];
+        fc_map_frag_align(g_mnmpOpt, g_minimizer, l_segOff+l_sg, 1, &qlens[l_sg], &qseqs[l_sg], &i_chainsBatch.m_numReg[l_segOff+l_sg], &i_chainsBatch.m_reg[l_segOff+l_sg], i_chainsBatch.m_seqs[l_segOff+l_sg].name, l_repLen, l_fragGap, l_fragExtSOA);
       }
     } else {
-      //fc_map_frag_align(g_minimizer, i_chainsBatch.m_numSeg[l_fr], qlens, qseqs, &i_chainsBatch.m_numReg[off], &i_chainsBatch.m_reg[off], b, g_mnmpOpt, i_chainsBatch.m_seqs[off].name);
-      for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {
-        i_chainsBatch.m_repLen[off + l_sg] = b->rep_len;
-        i_chainsBatch.m_fragGap[off + l_sg] = b->frag_gap;
-      }
+      int l_repLen = i_chainsBatch.m_repLen[l_segOff];
+      int l_fragGap = i_chainsBatch.m_fragGap[l_segOff];
+      fc_map_frag_align(g_mnmpOpt, g_minimizer, l_fr, i_chainsBatch.m_numSeg[l_fr], qlens, qseqs, &i_chainsBatch.m_numReg[l_segOff], &i_chainsBatch.m_reg[l_segOff], i_chainsBatch.m_seqs[l_segOff].name, l_repLen, l_fragGap, l_fragExtSOA);
     }
 
     for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {// flip the query strand and coordinate to the original read strand
       if (i_chainsBatch.m_numSeg[l_fr] == 2 && ((l_sg == 0 && (pe_ori>>1&1)) || (l_sg == 1 && (pe_ori&1)))) {
         int k, t;
-        mm_revcomp_bseq(&i_chainsBatch.m_seqs[off + l_sg]);
-        for (k = 0; k < i_chainsBatch.m_numReg[off + l_sg]; ++k) {
-          mm_reg1_t *r = &i_chainsBatch.m_reg[off + l_sg][k];
+        mm_revcomp_bseq(&i_chainsBatch.m_seqs[l_segOff + l_sg]);
+        for (k = 0; k < i_chainsBatch.m_numReg[l_segOff + l_sg]; ++k) {
+          mm_reg1_t *r = &i_chainsBatch.m_reg[l_segOff + l_sg][k];
           t = r->qs;
           r->qs = qlens[l_sg] - r->qe;
           r->qe = qlens[l_sg] - t;
@@ -259,11 +262,8 @@ AlignsBatch MinimapAlign::compute(ChainsBatch const &i_chainsBatch) {
         }
       }
     }
-    mm_tbuf_destroy(b);
   }
-  free(i_chainsBatch.m_buf);
-  free(i_chainsBatch.m_qlens);
-
+  deleteFragmentExtensionSOA(l_fragExtSOA);
 
   AlignsBatch o_alignsBatch;
   o_alignsBatch.m_batchIdx    = i_chainsBatch.m_batchIdx;

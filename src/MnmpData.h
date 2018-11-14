@@ -6,6 +6,16 @@
 #include "minimap.h"
 
 
+struct fragExtSOA {
+  mm_reg1_t **m_regs0Arr;
+  int        *m_numRegs0;
+
+  uint32_t  *m_hash;
+  mm128_t  **m_anchorArr;
+};
+
+fragExtSOA *createFragmentExtensionSOA(int);
+void deleteFragmentExtensionSOA(fragExtSOA *);
 
 struct SeqsBatch {
   int         m_batchIdx;
@@ -39,9 +49,8 @@ struct ChainsBatch {
   int *m_fragGap;
 
   mm_reg1_t **m_reg;
-  mm_tbuf_t **m_buf; 
 
-  int *m_qlens;
+  fragExtSOA *m_fragExtSOA;
 
   //std::string name_tag = "ChainsBatch";
 };
@@ -61,9 +70,6 @@ struct AlignsBatch {
   int *m_fragGap;
 
   mm_reg1_t **m_reg;
-  mm_tbuf_t **m_buf; 
-
-  int *m_qlens;
 
   //std::string name_tag = "AlignsBatch";
 };

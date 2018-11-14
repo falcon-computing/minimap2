@@ -7,6 +7,8 @@
 #include "minimap.h"
 #include "mmpriv.h"
 
+#include "MnmpData.h"
+
 /* static export */
 extern "C" {
   /* map.c */
@@ -24,6 +26,9 @@ extern "C" {
 /* format.c */
 std::string fc_write_sam_hdr(const mm_idx_t *idx, const std::string rg, const std::string ver, const std::string cmd);
 /* map.c */
-void fc_map_frag(const mm_idx_t *mi, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, mm_tbuf_t *b, const mm_mapopt_t *opt, const char *qname);
+void fc_map_frag_chain(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_fragIdx, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, const char *qname, fragExtSOA *io_fragExtSOA, int *o_repLen, int *o_fragGap);
+void fc_map_frag_align(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_fragIdx, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, const char *qname, const int i_repLen, const int i_fragGap, fragExtSOA *io_fragExtSOA);
+mm_tbuf_t *fc_tbuf_init(void);
+void fc_tbuf_destroy(mm_tbuf_t *);
 
 #endif
