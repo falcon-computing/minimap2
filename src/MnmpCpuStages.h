@@ -37,7 +37,6 @@ class MinimapOriginMap : public kestrelFlow::MapStage<SeqsBatch, AlignsBatch, IN
   AlignsBatch compute(SeqsBatch const &i_seqsBatch);
 };
 
-#if 1
 class MinimapChain : public kestrelFlow::MapStage<SeqsBatch, ChainsBatch, INPUT_DEPTH, COMPUTE_DEPTH> {
  public:
   MinimapChain(int n=1)
@@ -53,18 +52,43 @@ class MinimapAlign : public kestrelFlow::MapStage<ChainsBatch, AlignsBatch, COMP
 
   AlignsBatch compute(ChainsBatch const &i_chainsBatch);
 };
-#endif
 
+class Reorder : public kestrelFlow::MapPartitionStage<AlignsBatch, AlignsBundle, COMPUTE_DEPTH, COMPUTE_DEPTH> {
+ public:
+  Reorder(int n=1)
+  : kestrelFlow::MapPartitionStage<AlignsBatch, AlignsBundle, COMPUTE_DEPTH, COMPUTE_DEPTH>(n, false) {;}
+
+  void compute(int i_workerId); 
+};
+
+class CoordSort : public kestrelFlow::MapStage<AlignsBundle, BamsBatch, COMPUTE_DEPTH, COMPUTE_DEPTH> {
+ public:
+  CoordSort(int n=1)
+  : kestrelFlow::MapStage<AlignsBundle, BamsBatch, COMPUTE_DEPTH, COMPUTE_DEPTH>(n) {;}
+
+  BamsBatch compute(AlignsBundle const &i_alignsBundle);
+};
+
+#if 0
 class SeqsWrite : public kestrelFlow::MapStage<AlignsBatch, int, OUTPUT_DEPTH, 0> {
  public:
   SeqsWrite(int n=1, std::string i_cmdInfo = "")
-  : kestrelFlow::MapStage<AlignsBatch, int, OUTPUT_DEPTH, 0>(n, false),
+  : kestrelFlow::MapStage<AlignsBatch, int, OUTPUT_DEPTH, 0>(n),
     m_cmdInfo(i_cmdInfo)
   {;}
 
   int compute(AlignsBatch const &i_alignsBatch);
  private:
   std::string m_cmdInfo;
+};
+#endif
+
+class SeqsWrite : public kestrelFlow::MapStage<BamsBatch, int, OUTPUT_DEPTH, 0> {
+ public:
+  SeqsWrite(int n=1)
+  : kestrelFlow::MapStage<BamsBatch, int, OUTPUT_DEPTH, 0>(n) {;}
+
+  int compute(BamsBatch const &i_bamsBatch);
 };
 
 #endif

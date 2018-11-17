@@ -17,6 +17,10 @@ DECLARE_int32(t);
 DECLARE_string(R);
 
 DECLARE_string(output_dir);
+DECLARE_int32(output_flag);
+DECLARE_int32(output_size);
+DECLARE_bool(inorder_output);
+DECLARE_bool(sort);
 DECLARE_bool(bam);
 
 int fc_set_opt(void);

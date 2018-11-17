@@ -10,6 +10,7 @@
 
 #include "minimap.h"
 #include "mmpriv.h"
+#include "htslib/sam.h"
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
@@ -22,6 +23,7 @@ mm_mapopt_t *g_mnmpOpt;
 mm_idxopt_t *g_mnmpIpt;
 mm_idx_t *g_minimizer;
 mm_idx_reader_t *g_idxReader;
+bam_hdr_t *g_bamHeader;
 
 extern int    g_numFp;
 extern char **g_fn;

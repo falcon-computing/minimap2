@@ -23,7 +23,16 @@ DEFINE_string(R, "",
                 "-R arg in original minimap2, SAM read group line in a format like '@RG\\tID:foo\\tSM:bar'");
 
 DEFINE_string(output_dir, "./",
-                "output directory for SAM/BAM files");   
+                "output directory for SAM/BAM files");
+DEFINE_int32(output_flag, -1,
+                "Flag to specify output format: "
+                "0: BAM (compressed); 1: BAM (uncompressed); 2: SAM");
+DEFINE_int32(output_size, 40,
+                "number of batches in a SAM/BAM file");
+DEFINE_bool(inorder_output, false,
+                "write all batches in order");
+DEFINE_bool(sort, true,
+                "apply coordinate sort");
 DEFINE_bool(bam, false,
                 "output in BAM format");
 
@@ -48,14 +57,10 @@ int fc_set_opt() {
     g_mnmpOpt->best_n = 20;
     g_mnmpOpt->mid_occ = 1000;
     g_mnmpOpt->max_occ = 5000;
-    g_mnmpOpt->mini_batch_size = 500000;
+    g_mnmpOpt->mini_batch_size = 5000000;
   }
   else {
     return -1;
-  }
-
-  if (FLAGS_a || FLAGS_sam) {
-    g_mnmpOpt->flag |= MM_F_OUT_SAM | MM_F_CIGAR;
   }
 
   if (FLAGS_frag) {
@@ -64,6 +69,15 @@ int fc_set_opt() {
   else {
     g_mnmpOpt->flag &= ~MM_F_FRAG_MODE;
   }
+
+  // Config output format
+  if (FLAGS_a || FLAGS_sam) {
+    g_mnmpOpt->flag |= MM_F_OUT_SAM | MM_F_CIGAR;
+    FLAGS_output_flag = 2;
+  }
+  if (FLAGS_bam || FLAGS_output_flag == -1) { //Bam config will overwrite sam config
+    FLAGS_output_flag = 1;
+  } //TODO: add support for PAF format
 
   return 0;
 }

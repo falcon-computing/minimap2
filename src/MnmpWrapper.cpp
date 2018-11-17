@@ -152,6 +152,10 @@ void fc_map_frag_chain(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_f
         io_fragExtSOA->m_hash[i_fragIdx] = l_hash;
 
         io_fragExtSOA->m_anchorArr[i_fragIdx] = l_anchorArr; // numAnchor is not used in map_align
+
+        kfree(NULL, l_mv.a);
+        kfree(NULL, l_uArr);
+        kfree(NULL, l_miniPosArr);
 }
 
 void fc_map_frag_align(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_fragIdx, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, const char *qname, const int i_repLen, const int i_fragGap, fragExtSOA *io_fragExtSOA)

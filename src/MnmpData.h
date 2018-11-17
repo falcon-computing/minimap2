@@ -2,8 +2,10 @@
 #define MNMP_FLOW_DATA_H
 
 #include <string>
+#include <vector>
 #include "bseq.h"
 #include "minimap.h"
+#include "htslib/sam.h"
 
 
 struct fragExtSOA {
@@ -74,7 +76,16 @@ struct AlignsBatch {
   //std::string name_tag = "AlignsBatch";
 };
 
+struct AlignsBundle {
+  int                       m_bundleIdx;
+  std::vector<AlignsBatch> *m_batches;
+};
 
+struct BamsBatch {
+  int      m_batchIdx;
+  int      m_numBams;
+  bam1_t  *m_bams;
+};
 
 
 #endif

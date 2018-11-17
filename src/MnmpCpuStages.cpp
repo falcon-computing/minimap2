@@ -24,6 +24,7 @@ void SeqsRead::compute() {
 
   int l_numProcessed = 0;
 
+  // Open files
   if (m_numFp < 1) {
     return;
   }
@@ -91,6 +92,11 @@ void SeqsRead::compute() {
 
     this->pushOutput(o_seqsBatch);
   }
+
+  // Close files
+  for (int l_i = 0; l_i < m_numFp; l_i++)
+    mm_bseq_close(l_fp[l_i]);
+  free(l_fp);
 
   return;
 }
@@ -164,7 +170,7 @@ AlignsBatch MinimapOriginMap::compute(SeqsBatch const &i_seqsBatch) {
 ChainsBatch MinimapChain::compute(SeqsBatch const &i_seqsBatch) {
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started MinimapChain";
 
-  fragExtSOA *l_fragExtSOA = createFragmentExtensionSOA(i_seqsBatch.m_numFrag);
+  fragExtSOA *l_fragExtSOA;
   if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
     l_fragExtSOA = createFragmentExtensionSOA(i_seqsBatch.m_numSeq);
   }
@@ -285,14 +291,171 @@ AlignsBatch MinimapAlign::compute(ChainsBatch const &i_chainsBatch) {
 }
 
 
+void Reorder::compute(int i_workerId) {
+  std::map<int, AlignsBatch> l_inorderCache;
+  
+  std::vector<AlignsBatch> *l_bundle = new std::vector<AlignsBatch>;
+  int l_batchCounter = 0;
+  int l_bundleCounter = 0;
 
+  while (true) {
+    AlignsBatch i_alignsBatch;
+    bool l_ready = this->getInput(i_alignsBatch);
+    while (!this->isFinal() && !l_ready) {
+      boost::this_thread::sleep_for(boost::chrono::microseconds(10));
+      l_ready = this->getInput(i_alignsBatch);
+    }
+    if (!l_ready) {
+      break;
+    }
+
+    if (!FLAGS_inorder_output) {
+      l_bundle->push_back(i_alignsBatch);
+      if (l_bundle->size() >= FLAGS_output_size) {
+        AlignsBundle o_alignsBundle;
+        o_alignsBundle.m_bundleIdx = l_bundleCounter++;
+        o_alignsBundle.m_batches = l_bundle;
+        this->pushOutput(o_alignsBundle);
+        l_bundle = new std::vector<AlignsBatch>;
+      }
+    }
+    else {
+      l_inorderCache[i_alignsBatch.m_batchIdx] = i_alignsBatch;
+      while (l_inorderCache.find(l_batchCounter) != l_inorderCache.end()) {
+        l_bundle->push_back(l_inorderCache[l_batchCounter]);
+        l_inorderCache.erase(l_batchCounter);
+        l_batchCounter++;
+        if (l_bundle->size() >= FLAGS_output_size) {
+          AlignsBundle o_alignsBundle;
+          o_alignsBundle.m_bundleIdx = l_bundleCounter++;
+          o_alignsBundle.m_batches = l_bundle;
+          this->pushOutput(o_alignsBundle);
+          l_bundle = new std::vector<AlignsBatch>;
+        }
+      }
+    }
+  }
+
+  if (l_bundle->size() > 0) {
+    AlignsBundle o_alignsBundle;
+    o_alignsBundle.m_bundleIdx = l_bundleCounter++;
+    o_alignsBundle.m_batches = l_bundle;
+    this->pushOutput(o_alignsBundle);
+  }
+}
+
+static bool bam1_lt(const bam1_t &a, const bam1_t &b) {
+  return ((uint64_t)a.core.tid<<32|(a.core.pos+1)<<1|bam_is_rev(&a))
+       < ((uint64_t)b.core.tid<<32|(b.core.pos+1)<<1|bam_is_rev(&b));
+}
+
+BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
+  bam_hdr_t *l_bamHeader = g_bamHeader;
+  DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started CoordSort";
+
+  int l_numBamsEst = 0;
+  for (int l_ba = 0; l_ba < i_alignsBundle.m_batches->size(); l_ba++) {
+    AlignsBatch &l_alignsBatch = (*i_alignsBundle.m_batches)[l_ba];
+    for (int l_sq = 0; l_sq < l_alignsBatch.m_numSeq; l_sq++) {
+      l_numBamsEst += (l_alignsBatch.m_numReg[l_sq] > 0) ? l_alignsBatch.m_numReg[l_sq]
+                      : ((g_mnmpOpt->flag & (MM_F_OUT_SAM|MM_F_PAF_NO_HIT)) ? 1 : 0);
+    }
+  }
+  l_numBamsEst = l_numBamsEst + (int)(0.2*l_numBamsEst);
+
+  // Convert into bams
+  kstring_t l_samStrBuf = {0, 0, 0};
+  bam1_t *l_bamsArr = (bam1_t*)malloc(l_numBamsEst*sizeof(bam1_t));
+  int l_numBams = 0;
+  for (int l_ba = 0; l_ba < i_alignsBundle.m_batches->size(); l_ba++) {
+    AlignsBatch &l_alignsBatch = (*i_alignsBundle.m_batches)[l_ba];
+    for (int l_fr = 0; l_fr < l_alignsBatch.m_numFrag; l_fr++) {
+      int l_segOffset = l_alignsBatch.m_segOff[l_fr];
+      int l_numSegs   = l_alignsBatch.m_numSeg[l_fr];
+
+      int *l_numRegsArr = &l_alignsBatch.m_numReg[l_segOffset];
+      mm_reg1_t const *const * l_regsArr = &l_alignsBatch.m_reg[l_segOffset];
+
+      // Convert a fragment[pair] to bams
+      int l_retCode;
+      for (int l_sg = l_segOffset; l_sg < l_segOffset+l_numSegs; l_sg++) {
+        mm_bseq1_t *l_seq = &l_alignsBatch.m_seqs[l_sg];
+
+        if (l_alignsBatch.m_numReg[l_sg] > 0) { // the query has at least one hit
+          for (int l_rg = 0; l_rg < l_alignsBatch.m_numReg[l_sg]; l_rg++) {
+            mm_reg1_t *l_reg = &l_alignsBatch.m_reg[l_sg][l_rg];
+            assert(!l_reg->sam_pri || l_reg->id == l_reg->parent);
+            if ((g_mnmpOpt->flag & MM_F_NO_PRINT_2ND) && l_reg->id != l_reg->parent)
+              continue;
+
+            mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, l_rg, l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
+            if (l_numBams >= l_numBamsEst) {
+              l_numBamsEst += (int)(0.2*l_numBamsEst);
+              l_bamsArr = (bam1_t*)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t));
+            }
+            bam1_t *l_bam = &l_bamsArr[l_numBams++];
+            l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
+          }
+        }
+        else if (g_mnmpOpt->flag & (MM_F_OUT_SAM|MM_F_PAF_NO_HIT)) { // output an empty hit, if requested
+          mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, -1, l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
+          if (l_numBams >= l_numBamsEst) {
+            l_numBamsEst += (int)(0.2*l_numBamsEst);
+            l_bamsArr = (bam1_t*)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t));
+          }
+          bam1_t *l_bam = &l_bamsArr[l_numBams++];
+          l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
+        }
+      }
+
+      // Free a fragment[pair]; TODO: retain for PAF output
+      for (int l_sg = l_segOffset; l_sg < l_segOffset+l_numSegs; l_sg++) {
+        mm_bseq1_t *l_curSeq = &l_alignsBatch.m_seqs[l_sg];
+
+        for (int l_rg = 0; l_rg < l_alignsBatch.m_numReg[l_sg]; l_rg++)
+          free(l_alignsBatch.m_reg[l_sg][l_rg].p);
+        free(l_alignsBatch.m_reg[l_sg]);
+
+        free(l_curSeq->seq);
+        free(l_curSeq->name);
+        if (l_curSeq->qual)
+          free(l_curSeq->qual);
+        if (l_curSeq->comment)
+          free(l_curSeq->comment);
+      }
+    } // close loop over fragments
+
+    // Free a batch of alignment
+    free(l_alignsBatch.m_reg);
+    free(l_alignsBatch.m_numReg);
+    free(l_alignsBatch.m_seqs); // seg_off, n_seg, rep_len and frag_gap were allocated with reg; no memory leak here
+  } // close loop over batches
+  delete i_alignsBundle.m_batches;
+  l_bamsArr = (bam1_t*)realloc(l_bamsArr, l_numBams*sizeof(bam1_t));
+  free(l_samStrBuf.s);
+
+
+  // Sort
+  if (FLAGS_sort) {
+    std::sort(l_bamsArr, l_bamsArr+l_numBams, bam1_lt);
+  }
+
+  BamsBatch o_bamsBatch;
+  o_bamsBatch.m_batchIdx = i_alignsBundle.m_bundleIdx;
+  o_bamsBatch.m_bams     = l_bamsArr;
+  o_bamsBatch.m_numBams  = l_numBams;
+  
+  DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished CoordSort";
+
+  return o_bamsBatch;
+}
+
+#if 0
 int SeqsWrite::compute(AlignsBatch const &i_alignsBatch) {
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started SeqsWrite";
 
   const mm_idx_t *mi = g_minimizer;
   void *km = NULL;
-  if ((g_mnmpOpt->flag & MM_F_OUT_CS) && !(mm_dbg_flag & MM_DBG_NO_KALLOC))
-    km = km_init();
   kstring_t l_outputStrBuf = {0, 0, 0};
 
   // Output File
@@ -409,6 +572,40 @@ int SeqsWrite::compute(AlignsBatch const &i_alignsBatch) {
     bam_hdr_destroy(l_bamHeader);
     l_retCode = sam_close(l_bamOutputFp);
   }
+
+  DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished SeqsWrite";
+
+  return 0;
+}
+#endif
+
+int SeqsWrite::compute(BamsBatch const &i_bamsBatch) {
+  DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started SeqsWrite";
+  static char *l_writeMode[] = { "wb", "wb0", "w" };
+
+  // Output File
+  std::stringstream l_outputFname;
+  samFile          *l_bamOutputFp;
+
+  l_outputFname << FLAGS_output_dir << "/part-"
+                << std::setw(6) << std::setfill('0') << i_bamsBatch.m_batchIdx << ".log";
+  if (FLAGS_output_flag < 0 || FLAGS_output_flag > 2)
+    FLAGS_output_flag = 1;
+  l_bamOutputFp = sam_open(l_outputFname.str().c_str(), l_writeMode[FLAGS_output_flag]);
+
+  // Write headers
+  int l_retCode;
+  l_retCode = sam_hdr_write(l_bamOutputFp, g_bamHeader);
+  
+  // Write records
+  for (int l_bm = 0; l_bm < i_bamsBatch.m_numBams; l_bm++) {
+    l_retCode = sam_write1(l_bamOutputFp, g_bamHeader, &i_bamsBatch.m_bams[l_bm]);
+    free(i_bamsBatch.m_bams[l_bm].data);
+    //bam_destroy1(i_bamsBatch.m_bams[l_bm]);
+  }
+  free(i_bamsBatch.m_bams);
+  
+  l_retCode = sam_close(l_bamOutputFp);
 
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished SeqsWrite";
 

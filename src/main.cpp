@@ -9,16 +9,19 @@
 
 #include "minimap.h"
 #include "mmpriv.h"
+#include "htslib/sam.h"
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
 #include "MnmpOptions.h"
+#include "MnmpWrapper.h"
 #include "MnmpCpuStages.h"
 
 mm_mapopt_t *g_mnmpOpt;
 mm_idxopt_t *g_mnmpIpt;
 mm_idx_t *g_minimizer;
 mm_idx_reader_t *g_idxReader;
+bam_hdr_t *g_bamHeader;
 
 
 
@@ -104,9 +107,16 @@ int main(int argc, char *argv[]) {
   if (argc != 2) {
     mm_mapopt_update(g_mnmpOpt, g_minimizer);
   }
+  else {
+    return 0;
+  }
   if (FLAGS_v >= 3) {
     mm_idx_stat(g_minimizer);
   }
+  // Prepare header
+  std::string l_headerStr = fc_write_sam_hdr(g_minimizer, FLAGS_R, VERSION, l_cmdStr.str());
+  g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
+
   int    l_numSegs = argc - 2;
   char **l_fileName = &argv[2];
 
@@ -115,9 +125,14 @@ int main(int argc, char *argv[]) {
   MinimapOriginMap l_oriMapStg(l_numThreads);
   MinimapChain     l_chainStg(l_numThreads);
   MinimapAlign     l_alignStg(l_numThreads);
-  SeqsWrite        l_writeStg(1, l_cmdStr.str());
+  Reorder          l_reordStg;
+  CoordSort        l_sortStg(l_numThreads);
+#if 0
+  SeqsWrite        l_writeStg(l_numThreads, l_cmdStr.str());
+#endif
+  SeqsWrite        l_writeStg(l_numThreads);
 
-  int l_numStages = 4;
+  int l_numStages = 6;
   kestrelFlow::Pipeline l_auxPipe(l_numStages, l_numThreads);
   kestrelFlow::MegaPipe l_mnmpPipe(l_numThreads, 0);
 
@@ -126,6 +141,8 @@ int main(int argc, char *argv[]) {
   //l_auxPipe.addStage(l_stg++, &l_oriMapStg);
   l_auxPipe.addStage(l_stg++, &l_chainStg);
   l_auxPipe.addStage(l_stg++, &l_alignStg);
+  l_auxPipe.addStage(l_stg++, &l_reordStg);
+  l_auxPipe.addStage(l_stg++, &l_sortStg);
   l_auxPipe.addStage(l_stg++, &l_writeStg);
   
   l_mnmpPipe.addPipeline(&l_auxPipe, 1);
@@ -143,6 +160,7 @@ int main(int argc, char *argv[]) {
   double l_endTime = realtime();
 
   // Clean up
+  bam_hdr_destroy(g_bamHeader);
   free(g_mnmpOpt);
   free(g_mnmpIpt);
 
