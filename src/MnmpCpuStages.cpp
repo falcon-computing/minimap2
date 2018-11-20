@@ -344,9 +344,9 @@ void Reorder::compute(int i_workerId) {
   }
 }
 
-static bool bam1_lt(const bam1_t &a, const bam1_t &b) {
-  return ((uint64_t)a.core.tid<<32|(a.core.pos+1)<<1|bam_is_rev(&a))
-       < ((uint64_t)b.core.tid<<32|(b.core.pos+1)<<1|bam_is_rev(&b));
+static bool bam1_lt(const bam1_t *a, const bam1_t *b) {
+  return ((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a))
+       < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b));
 }
 
 BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
@@ -365,7 +365,7 @@ BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
 
   // Convert into bams
   kstring_t l_samStrBuf = {0, 0, 0};
-  bam1_t *l_bamsArr = (bam1_t*)malloc(l_numBamsEst*sizeof(bam1_t));
+  bam1_t **l_bamsArr = (bam1_t**)malloc(l_numBamsEst*sizeof(bam1_t*));
   int l_numBams = 0;
   for (int l_ba = 0; l_ba < i_alignsBundle.m_batches->size(); l_ba++) {
     AlignsBatch &l_alignsBatch = (*i_alignsBundle.m_batches)[l_ba];
@@ -391,20 +391,22 @@ BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
             mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, l_rg, l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
             if (l_numBams >= l_numBamsEst) {
               l_numBamsEst += (int)(0.2*l_numBamsEst);
-              l_bamsArr = (bam1_t*)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t));
+              l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t*));
             }
-            bam1_t *l_bam = &l_bamsArr[l_numBams++];
+            bam1_t *l_bam = bam_init1();
             l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
+            l_bamsArr[l_numBams++] = l_bam;
           }
         }
         else if (g_mnmpOpt->flag & (MM_F_OUT_SAM|MM_F_PAF_NO_HIT)) { // output an empty hit, if requested
           mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, -1, l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
           if (l_numBams >= l_numBamsEst) {
             l_numBamsEst += (int)(0.2*l_numBamsEst);
-            l_bamsArr = (bam1_t*)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t));
+            l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t*));
           }
-          bam1_t *l_bam = &l_bamsArr[l_numBams++];
+          bam1_t *l_bam = bam_init1();
           l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
+          l_bamsArr[l_numBams++] = l_bam;
         }
       }
 
@@ -431,7 +433,7 @@ BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
     free(l_alignsBatch.m_seqs); // seg_off, n_seg, rep_len and frag_gap were allocated with reg; no memory leak here
   } // close loop over batches
   delete i_alignsBundle.m_batches;
-  l_bamsArr = (bam1_t*)realloc(l_bamsArr, l_numBams*sizeof(bam1_t));
+  l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBams*sizeof(bam1_t*));
   free(l_samStrBuf.s);
 
 
@@ -599,9 +601,8 @@ int SeqsWrite::compute(BamsBatch const &i_bamsBatch) {
   
   // Write records
   for (int l_bm = 0; l_bm < i_bamsBatch.m_numBams; l_bm++) {
-    l_retCode = sam_write1(l_bamOutputFp, g_bamHeader, &i_bamsBatch.m_bams[l_bm]);
-    free(i_bamsBatch.m_bams[l_bm].data);
-    //bam_destroy1(i_bamsBatch.m_bams[l_bm]);
+    l_retCode = sam_write1(l_bamOutputFp, g_bamHeader, i_bamsBatch.m_bams[l_bm]);
+    bam_destroy1(i_bamsBatch.m_bams[l_bm]);
   }
   free(i_bamsBatch.m_bams);
   

@@ -57,7 +57,7 @@ int fc_set_opt() {
     g_mnmpOpt->best_n = 20;
     g_mnmpOpt->mid_occ = 1000;
     g_mnmpOpt->max_occ = 5000;
-    g_mnmpOpt->mini_batch_size = 5000000;
+    g_mnmpOpt->mini_batch_size = 10000000;
   }
   else {
     return -1;

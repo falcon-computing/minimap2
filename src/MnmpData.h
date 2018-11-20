@@ -84,7 +84,7 @@ struct AlignsBundle {
 struct BamsBatch {
   int      m_batchIdx;
   int      m_numBams;
-  bam1_t  *m_bams;
+  bam1_t **m_bams;
 };
 
 
