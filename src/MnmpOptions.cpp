@@ -27,7 +27,7 @@ DEFINE_string(output_dir, "./",
 DEFINE_int32(output_flag, -1,
                 "Flag to specify output format: "
                 "0: BAM (compressed); 1: BAM (uncompressed); 2: SAM");
-DEFINE_int32(output_size, 40,
+DEFINE_int32(output_size, 128,
                 "number of batches in a SAM/BAM file");
 DEFINE_bool(inorder_output, false,
                 "write all batches in order");
@@ -57,7 +57,7 @@ int fc_set_opt() {
     g_mnmpOpt->best_n = 20;
     g_mnmpOpt->mid_occ = 1000;
     g_mnmpOpt->max_occ = 5000;
-    g_mnmpOpt->mini_batch_size = 10000000;
+    g_mnmpOpt->mini_batch_size = 2560000;
   }
   else {
     return -1;
