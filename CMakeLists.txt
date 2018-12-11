@@ -52,7 +52,7 @@ add_subdirectory(minimap2)
 
 # set up for compilation
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -fPIC -DUSE_HTSLIB")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -rdynamic -Og")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -rdynamic -O2")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -rdynamic -Wall -DUSELICENSE")
 if ( USE_MPI )
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_CXX_LINK_FLAGS}")
@@ -91,7 +91,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVERSION=\\\"${BIN_VERSION}\\\"")
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_stages)
 
 include_directories( ./kflow/include )
 include_directories( ./minimap2 )
@@ -109,7 +110,7 @@ link_directories(
   ${Boost_LIBRARY_DIRS}
   ${HTS_LIBRARY_DIRS})
 
-file(GLOB MM_SRC_LIST src/*.cpp)
+file(GLOB MM_SRC_LIST "src/*.cpp" "src/cpu_stages/*.cpp")
 list(REMOVE_ITEM MM_SRC_LIST "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
 if ( USE_FPGA )

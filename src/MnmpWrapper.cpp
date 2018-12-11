@@ -187,3 +187,165 @@ void fc_map_frag_align(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_f
 
 	kfree(NULL, l_anchorArr);
 }
+
+bool packInput(int const                 i_fragId,
+               int const                 i_numSegs,
+               int const                 i_segOff,
+               int const                 i_repLen,
+               int const                 i_fragGap,
+               int const                 i_numRegs0,
+               mm_reg1_t * const         i_regs0,
+               mm128_t   * const         i_anks,
+               uint32_t    const         i_hash,
+               std::vector<mm_seg_t*>   &o_segChnsInChunkArr,
+               std::vector<int>         &o_seqReference,
+               std::vector<align_input> &o_fpgaChunkInput)
+{
+  const int l_fr = io_fragId;
+  const int l_numSegs = i_chainsBatch.m_numSeg[l_fr];
+  const int l_segOff  = i_chainsBatch.m_segOff[l_fr];
+
+  fragExtSOA * const l_fragExtSOA = i_chainsBatch.m_fragExtSOA;
+
+  int l_queryLens[MM_MAX_SEG];
+  const char *l_querySeqs[MM_MAX_SEG];
+  for (int l_sg = 0; l_sg < l_numSegs; l_sg++) {
+    l_queryLens[l_sg] = i_chainsBatch.m_seqs[l_segOff + l_sg].l_seq;
+    l_querySeqs[l_sg] = i_chainsBatch.m_seqs[l_segOff + l_sg].seq;
+  }
+
+  mm_seg_t *l_segChns = NULL;
+  if (l_numSegs > 1) {
+    // split fragment chain to separate segment chains (original scope: mm_map_frag/fc_map_frag_align)
+    l_segChns = mm_seg_gen(NULL,
+                          l_hash,
+                          l_numSegs,
+                          l_queryLens, 
+                          l_numRegs0,
+                          l_regs0Arr,
+                          l_numRegsOfSgmArr,
+                          l_regsOfSgmArr,
+                          l_anks);
+    free(l_regs0Arr);
+
+    // update mm_reg1_t::parent (original scope: mm_map_frag/fc_map_frag_align)
+    for (int l_sg = 0; l_sg < l_numSegs; l_sg++) {
+      mm_set_parent(NULL,
+                    g_mnmpOpt->mask_level,
+                    l_numRegsOfSgmArr[l_sg],
+                    l_regsOfSgmArr[l_sg],
+                    g_mnmpOpt->a * 2 + g_mnmpOpt->b,
+                    g_mnmpOpt->flag&MM_F_HARD_MLEVEL);
+    }
+  }
+  o_segChnsInChunkArr.push_back(l_segChns);
+
+  for (int l_sg = 0; l_sg < l_numSegs; l_sg++) {
+    /* the number of  regions of a segment in the fragment, aka a sequence in the pair */
+    int         l_numRegs = l_numRegsOfSgmArr[l_sg];
+    /* pointer to regions of a segment in the fragment, aka a sequence in the pair */
+    mm_reg1_t * l_regs    = l_regsOfSgmArr[l_sg];
+
+    // alias anchors (original scope: align_regs)
+    mm128_t *l_anchors = (l_numSegs > 1) ? l_segChns[l_sg].a : l_anks;
+    // get squeezed number of anchors (original scope: mm_align_skeleton, after query seqs encoding)
+    int32_t l_numAnchors = mm_squeeze_a(NULL, l_numRegs, l_regs, l_anchors);
+
+    if (l_queryLens[l_sg] > MAX_SEQ_LENGTH || l_numAnchors > MAX_ANKOR_NUM) {
+      return false;
+    }
+    
+    // encode the query sequence (original scope: mm_align_skeleton, before regions squeezing)
+    uint8_t l_encodedQseq[2][MAX_SEQ_LENGTH];
+    int  const         l_qlen = l_queryLens[l_sg];
+    char const * const l_qseq = l_querySeqs[l_sg];
+    for (int l_bs = 0; l_bs < l_qlen; l_bs++) {
+      l_encodedQseq[0][l_bs] = seq_nt4_table[(uint8_t)l_qseq[l_bs]];
+      l_encodedQseq[1][l_queryLens[l_sg]-l_bs-1] = (l_encodedQseq[0][l_bs] < 4) ? 3-l_encodedQseq[0][l_bs] : 4;
+    }
+
+    // generate align kernel inputs for all regions
+    for (int l_rg = 0; l_rg < l_numRegs; l_rg++) {
+      align_input l_newAlignInput;
+      l_newAlignInput.qlen = l_qlen;
+      for (int l_bs = 0; l_bs < l_qlen; l_bs++) {
+        l_newAlignInput.qseq[0][l_bs] = l_encodedQseq[0][l_bs];
+        l_newAlignInput.qseq[1][l_bs] = l_encodedQseq[1][l_bs];
+      }
+
+      l_newAlignInput.n_a = l_numAnchors;
+      memcpy(l_newAlignInput.a, l_anchors, l_numAnchors*sizeof(mm128_t));
+
+      /* leave region[1] as blank */
+      l_newAlignInput.region[0].orig = l_regs[l_rg];
+      /* leave dp_score[1] as blank */
+      l_newAlignInput.dp_score[0] = l_regs[l_rg].p->dp_score;
+
+      l_newAlignInput.data_size = sizeof(align_input) - 16 * MAX_ANKOR_NUM + 16 * l_numAnchors;
+
+      o_seqReference.push_back(l_fr);
+      o_seqReference.push_back(l_sg);
+      o_seqReference.push_back(l_rg);
+
+      o_alignInput.push_back(l_newAlignInput);
+    } // close loop over regions
+  } // close loop over segments
+
+  return true;
+}
+
+bool needRecalculate(int           i_numOutputs,
+                     align_output *i_alignOutputs)
+{
+  for (int l_i = 0; l_i < i_numOutputs; l_i++) {
+    if ( i_alignOutputs[l_i].region[1].cnt > 0                  ||
+         ( l_i > 0 && i_alignOutputs[l_i].region[0].split_inv )   ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void unpackOutput(int i_fragId,
+                  int i_sgmId,
+                  int i_regId,
+                  align_input        i_alignInput,
+                  align_output       i_alignOutput,
+                  mm_reg1_t*         i_regs,
+                  int const          i_numRegs,
+                  mm_seg_t*          i_segs,
+                  int const          i_numSegs,
+                  ChainsBatch const &io_chainsBatch)
+{
+  const int l_fr = i_fragId; 
+  const int l_sg = i_sgmId; 
+  const int l_rg = i_regId; 
+
+  const int l_segOff = i_chainsBatch.m_segOff[l_fr];
+  const int l_numReg = i_chainsBatch.m_numReg[l_segOff+l_sg];
+
+  // post-process on regions (original scope: mm_align_skeleton)
+  if (l_rg+1 == l_numReg) {
+    mm_filter_regs(g_mnmpOpt,
+                   i_alignInput.qlen,
+                  &i_chainsBatch.m_numReg[l_segOff+l_sg], 
+                  &i_chainsBatch.m_reg[l_segOff+l_sg]);
+    mm_hit_sort(NULL, &i_chainsBatch.m_numReg[l_segOff+l_sg], i_chainsBatch.m_reg[l_segOff+l_sg]);
+  }
+
+  // don't choose primary mapping(s) (original scope: align_regs)
+  if (!(opt->flag & MM_F_ALL_CHAINS)) {
+    mm_set_parent(NULL, g_mnmpOpt->mask_level, i_chainsBatch.m_numReg[l_segOff+l_sg], i_chainsBatch.m_reg[l_segOff+l_sg], g_mnmpOpt->a * 2 + g_mnmpOpt->b, g_mnmpOpt->flag&MM_F_HARD_MLEVEL);
+    mm_select_sub(NULL, g_mnmpOpt->pri_ratio, g_minimizer->k*2, g_mnmpOpt->best_n, &i_chainsBatch.m_numReg[l_segOff+l_sg], i_chainsBatch.m_reg[l_segOff+l_sg]);
+    mm_set_sam_pri(i_chainsBatch.m_numReg[l_segOff+l_sg], i_chainsBatch.m_reg[l_segOff+l_sg]);
+  }
+
+  mm_set_mapq(NULL, i_chainsBatch.m_numReg[l_segOff+l_sg], i_chainsBatch.m_reg[l_segOff+l_sg], g_mnmpOpt->min_chain_score, g_mnmpOpt->a, i_repLen, i_isSrFlag);
+
+  if (l_sg + 1 == l_numSeg && l_numSeg > 1) {
+    mm_seg_free(NULL, l_numSeg, i_seg);
+    if (n_segs == 2 && g_mnmpOpt->pe_ori >= 0 && (g_mnmpOpt->flag&MM_F_CIGAR)) {
+      mm_pair(NULL, i_fragGap, g_mnmpOpt->pe_bonus, g_mnmpOpt->a * 2 + g_mnmpOpt->b, g_mnmpOpt->a, qlens, l_numReg, i_chainsBatch.m_reg[l_segOff+l_sg]);
+    }
+  }
+}
