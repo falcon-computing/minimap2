@@ -23,6 +23,15 @@ DECLARE_bool(inorder_output);
 DECLARE_bool(sort);
 DECLARE_bool(bam);
 
+#ifdef BUILD_FPGA
+DECLARE_bool(use_fpga);
+DECLARE_string(fpga_path);
+
+#ifdef LOCAL_BLAZE
+DECLARE_string(blaze_conf);
+#endif
+#endif
+
 int fc_set_opt(void);
 
 #endif

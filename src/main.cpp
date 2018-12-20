@@ -10,19 +10,31 @@
 #include "minimap.h"
 #include "mmpriv.h"
 #include "htslib/sam.h"
+
+#ifdef BUILD_FPGA
+#pragma message "Using FPGA for build"
+#ifdef LOCAL_BLAZE
+#pragma message "Using local Blaze for build"
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/text_format.h>
+#include "blaze/PlatformManager.h"
+#include "blaze/AppCommManager.h"
+#endif
+#endif
+
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
 #include "MnmpOptions.h"
 #include "MnmpWrapper.h"
 #include "MnmpCpuStages.h"
+#include "MnmpFpgaStages.h"
 
 mm_mapopt_t *g_mnmpOpt;
 mm_idxopt_t *g_mnmpIpt;
 mm_idx_t *g_minimizer;
 mm_idx_reader_t *g_idxReader;
 bam_hdr_t *g_bamHeader;
-
 
 
 int main(int argc, char *argv[]) {
@@ -116,6 +128,8 @@ int main(int argc, char *argv[]) {
   // Prepare header
   std::string l_headerStr = fc_write_sam_hdr(g_minimizer, FLAGS_R, VERSION, l_cmdStr.str());
   g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
+  g_bamHeader->l_text = l_headerStr.length();
+  g_bamHeader->text = &l_headerStr[0];
 
   int    l_numSegs = argc - 2;
   char **l_fileName = &argv[2];
@@ -132,6 +146,10 @@ int main(int argc, char *argv[]) {
 #endif
   SeqsWrite        l_writeStg(l_numThreads);
 
+#ifdef BUILD_FPGA
+  MinimapAlignFpga l_alignFpgaStg(1);
+#endif
+
   int l_numStages = 6;
   kestrelFlow::Pipeline l_auxPipe(l_numStages, l_numThreads);
   kestrelFlow::MegaPipe l_mnmpPipe(l_numThreads, 0);
@@ -140,13 +158,41 @@ int main(int argc, char *argv[]) {
   l_auxPipe.addStage(l_stg++, &l_readStg);
   //l_auxPipe.addStage(l_stg++, &l_oriMapStg);
   l_auxPipe.addStage(l_stg++, &l_chainStg);
+#ifndef BUILD_FPGA
   l_auxPipe.addStage(l_stg++, &l_alignStg);
+#else
+  l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
+#endif
   l_auxPipe.addStage(l_stg++, &l_reordStg);
   l_auxPipe.addStage(l_stg++, &l_sortStg);
   l_auxPipe.addStage(l_stg++, &l_writeStg);
   
   l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
+#ifdef BUILD_FPGA
+#ifdef LOCAL_BLAZE
+  // Start Blaze Infrastructure
+  int l_confFileHandle = open(FLAGS_blaze_conf.c_str(), O_RDONLY);
+  if (l_confFileHandle < 0) {
+    LOG(ERROR) << "Cannot find configure file for local blaze: " << FLAGS_blaze_conf;
+    return -1;
+  }
+
+  google::protobuf::io::FileInputStream l_confFile(l_confFileHandle);
+
+  // config manager
+  blaze::ManagerConf l_blazeConf;
+  if (!google::protobuf::TextFormat::Parse(&l_confFile, &l_blazeConf)) {
+    throw std::runtime_error("cannot parse protobuf message");
+  }
+  FLAGS_v = std::max(FLAGS_v, l_blazeConf.verbose());
+  DLOG(INFO) << l_blazeConf.DebugString();
+
+  // start manager
+  blaze::PlatformManager l_blazePlatform(&l_blazeConf);
+  blaze::AppCommManager l_blazeComm(&l_blazePlatform, "127.0.0.1", 1027); 
+#endif
+#endif
 
   // Run pipeline
   l_mnmpPipe.start();
@@ -160,6 +206,8 @@ int main(int argc, char *argv[]) {
   double l_endTime = realtime();
 
   // Clean up
+  g_bamHeader->l_text = 0;
+  g_bamHeader->text = NULL;
   bam_hdr_destroy(g_bamHeader);
   free(g_mnmpOpt);
   free(g_mnmpIpt);

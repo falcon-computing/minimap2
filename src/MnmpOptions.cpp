@@ -36,6 +36,18 @@ DEFINE_bool(sort, true,
 DEFINE_bool(bam, false,
                 "output in BAM format");
 
+#ifdef BUILD_FPGA
+
+DEFINE_bool(use_fpga, true,
+                "enable fpga computation");
+DEFINE_string(fpga_path, "",
+                "path to FPGA bitstream");
+#ifdef LOCAL_BLAZE
+DEFINE_string(blaze_conf, "",
+                "config file for Blaze");
+#endif
+#endif
+
 int fc_set_opt() {
   mm_idxopt_init(g_mnmpIpt);
   mm_mapopt_init(g_mnmpOpt);

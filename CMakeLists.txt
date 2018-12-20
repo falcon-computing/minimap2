@@ -20,13 +20,13 @@ find_package( Google       REQUIRED )
 find_package( FalconLM     REQUIRED )
 find_package( HTS        REQUIRED )
 
-#if ( DEFINED ENV{XILINX_SDX} )
-#  set( USE_FPGA On )
-#  set( FPGA_TYPE "xlnx" )
-#  find_package( Xilinx REQUIRED )
-#  set( FPGA_INCLUDE_DIRS "${Xilinx_INCLUDE_DIRS}" )
-#  set( FPGA_LIBRARY_DIRS "${Xilinx_LIBRARY_DIRS}")
-#  set( FPGA_LIBRARIES "${Xilinx_LIBRARIES}")
+if ( DEFINED ENV{XILINX_SDX} )
+ set( USE_FPGA On )
+ set( FPGA_TYPE "xlnx" )
+ find_package( Xilinx REQUIRED )
+ set( FPGA_INCLUDE_DIRS "${Xilinx_INCLUDE_DIRS}" )
+ set( FPGA_LIBRARY_DIRS "${Xilinx_LIBRARY_DIRS}")
+ set( FPGA_LIBRARIES "${Xilinx_LIBRARIES}")
 #elseif ( DEFINED ENV{ALTERAOCLSDKROOT} )
 #  set( USE_FPGA On )
 #  set( FPGA_TYPE "intel" )
@@ -34,10 +34,16 @@ find_package( HTS        REQUIRED )
 #  set( FPGA_INCLUDE_DIRS "${IntelAltera_INCLUDE_DIRS}" )
 #  set( FPGA_LIBRARY_DIRS "${IntelAltera_LIBRARY_DIRS}")
 #  set( FPGA_LIBRARIES "${IntelAltera_LIBRARIES}")
-#else()
+else()
   message( STATUS "No OpenCL module loaded. Build without using FPGA." )
   set( USE_FPGA Off )
-#endif()
+endif()
+
+if ( USE_FPGA )
+  # find_package( Protobuf       REQUIRED )
+  find_package( Blaze          REQUIRED )
+  find_package( KSight         REQUIRED )
+endif()
 
 
 # set up debug/release mode
@@ -51,7 +57,7 @@ add_subdirectory(kflow)
 add_subdirectory(minimap2)
 
 # set up for compilation
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -fPIC -DUSE_HTSLIB")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -fPIC -DUSE_HTSLIB -msse4.1")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -rdynamic -O2")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -rdynamic -Wall -DUSELICENSE")
 if ( USE_MPI )
@@ -70,6 +76,8 @@ endif()
 set(BIN_VERSION "init")
 if ( USE_FPGA )
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FPGA" )
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLOCAL_BLAZE" )
+
   set(BIN_VERSION "${BIN_VERSION}-${FPGA_TYPE}")
   if ( ${FPGA_TYPE} MATCHES "xlnx" )
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DXILINX_FPGA" )
@@ -114,34 +122,44 @@ file(GLOB MM_SRC_LIST "src/*.cpp" "src/cpu_stages/*.cpp")
 list(REMOVE_ITEM MM_SRC_LIST "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
 if ( USE_FPGA )
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fpga
-                      ${CMAKE_CURRENT_SOURCE_DIR}/src/fpga/${FPGA_TYPE}
-                      ${FPGA_INCLUDE_DIRS})
-  link_directories(${FPGA_LIBRARY_DIRS})
-
-  file(GLOB MM_FPGA_SRC_LIST src/fpga/*.cpp)
-  list(APPEND MM_SRC_LIST ${MM_FPGA_SRC_LIST})
-
-  file(GLOB MM_FPGA_EXTRA_SRC_LIST src/fpga/${FPGA_TYPE}/*.cpp)
-  list(APPEND MM_SRC_LIST ${MM_FPGA_EXTRA_SRC_LIST})
+  include(${CMAKE_CURRENT_SOURCE_DIR}/src/fpga_stages/CMakeLists.txt)
 endif()
 
 
 add_executable(minimap-flow ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp ${MM_SRC_LIST})
+if ( USE_FPGA )
+  add_dependencies(minimap-flow Blaze KSight)
+endif()
 add_dependencies(minimap-flow Google FalconLM HTS)
 
 set (CMAKE_STATIC_LINKER_FLAGS "--as-needed")
-target_link_libraries(minimap-flow
-  minimap-c
-  kflow 
-  ${Boost_LIBRARIES} 
-  ${FalconLM_LIBRARIES}
-  ${Google_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
-  ${ZLIB_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${HTS_LIBRARIES}
-  ${FPGA_LIBRARIES})
+
+if ( USE_FPGA )
+  target_link_libraries(minimap-flow
+    minimap-c
+    kflow 
+    ${Boost_LIBRARIES} 
+    ${FalconLM_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${ZLIB_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${HTS_LIBRARIES}
+    ${Blaze_LIBRARIES}
+    ${KSight_LIBRARIES}
+    ${FPGA_LIBRARIES}
+    ${Google_LIBRARIES})
+else()
+  target_link_libraries(minimap-flow
+    minimap-c
+    kflow 
+    ${Boost_LIBRARIES} 
+    ${FalconLM_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${ZLIB_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${HTS_LIBRARIES}
+    ${Google_LIBRARIES})
+endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
    message(STATUS "Install prefix is set to ~/.falcon-genome/minimap/${BIN_VERSION}")

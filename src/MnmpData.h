@@ -4,16 +4,13 @@
 #include <string>
 #include <vector>
 #include "bseq.h"
+#include "mmpriv.h"
 #include "minimap.h"
 #include "htslib/sam.h"
 
 
 struct fragExtSOA {
-  mm_reg1_t **m_regs0Arr;
-  int        *m_numRegs0;
-
-  uint32_t  *m_hash;
-  mm128_t  **m_anchorArr;
+  mm_seg_t **m_segChainsArr;
 };
 
 fragExtSOA *createFragmentExtensionSOA(int);
