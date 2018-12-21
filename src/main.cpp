@@ -145,6 +145,8 @@ int main(int argc, char *argv[]) {
   // Prepare header
   std::string l_headerStr = fc_write_sam_hdr(g_minimizer, FLAGS_R, VERSION, l_cmdStr.str());
   g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
+  g_bamHeader->l_text = l_headerStr.length();
+  g_bamHeader->text = &l_headerStr[0];
   // if ((g_mnmpOpt->flag & MM_F_OUT_SAM) &&
   //     g_idxReader->n_parts == 1          ) {
   //   // skip header
@@ -194,6 +196,8 @@ int main(int argc, char *argv[]) {
   double l_endTime = realtime();
 
   // Clean up
+  g_bamHeader->text = NULL;
+  g_bamHeader->l_text = 0;
   bam_hdr_destroy(g_bamHeader);
   free(g_mnmpOpt);
   free(g_mnmpIpt);
