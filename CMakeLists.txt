@@ -133,7 +133,8 @@ add_dependencies(minimap-flow Google FalconLM HTS)
 set (CMAKE_STATIC_LINKER_FLAGS "--as-needed")
 target_link_libraries(minimap-flow
   minimap-c
-  kflow 
+  kflow
+  numa
   ${Boost_LIBRARIES} 
   ${FalconLM_LIBRARIES}
   ${Google_LIBRARIES}

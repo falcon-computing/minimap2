@@ -1,5 +1,8 @@
 #include <iostream>
 #include <string>
+#include <vector>
+
+#include <numa.h>
 
 #ifdef NDEBUG
 #define LOG_HEADER "falcon-minimap2"
@@ -23,6 +26,7 @@ mm_idx_t *g_minimizer;
 mm_idx_reader_t *g_idxReader;
 bam_hdr_t *g_bamHeader;
 
+std::vector<mm_idx_t*> g_minimizerNumaList;
 
 
 int main(int argc, char *argv[]) {
@@ -89,6 +93,19 @@ int main(int argc, char *argv[]) {
       (g_mnmpOpt->flag & MM_F_CIGAR)   ) {
     LOG_IF(WARNING, VLOG_IS_ON(2)) << "`-N 0' reduces alignment accuracy. Please use --secondary=no to suppress secondary alignments."; 
   }
+
+  int l_numNumaNodes = 1;
+  if (numa_available() != -1) {
+    l_numNumaNodes = numa_num_configured_nodes();
+  }
+  FLAGS_use_numa = (l_numNumaNodes > 1);
+  DLOG_IF(INFO, FLAGS_use_numa) << "Found " << l_numNumaNodes << " NUMA nodes";
+
+  struct bitmask *l_nodeMask = numa_parse_nodestring("0");
+  if (FLAGS_use_numa)
+    numa_set_membind(l_nodeMask);
+  numa_free_nodemask(l_nodeMask);
+  DLOG_IF(INFO, FLAGS_use_numa) << "Loading index on NUMA node 0";
   g_minimizer = mm_idx_reader_read(g_idxReader, std::min(FLAGS_t, 3));
   if ((g_mnmpOpt->flag & MM_F_CIGAR)    &&
       (g_minimizer->flag & MM_I_NO_SEQ)   ) {
@@ -99,10 +116,21 @@ int main(int argc, char *argv[]) {
     LOG(ERROR) << "The prebuilt index doesn't contain sequences.";
     return 1;
   }
-  if ((g_mnmpOpt->flag & MM_F_OUT_SAM) &&
-      g_idxReader->n_parts == 1          ) {
-    // skip header
+  g_minimizerNumaList.push_back(g_minimizer);
+
+  for (int l_nn = 1; l_nn < l_numNumaNodes; l_nn++) {
+    l_nodeMask = numa_parse_nodestring(std::to_string(l_nn).c_str());
+    numa_set_membind(l_nodeMask);
+    numa_free_nodemask(l_nodeMask);
+    DLOG_IF(INFO, FLAGS_use_numa) << "Loading index on NUMA node " << l_nn;
+    mm_idx_reader_t *l_idxReader = mm_idx_reader_open(l_indexFile.c_str(), g_mnmpIpt, NULL);
+    mm_idx_t *l_minimizer = mm_idx_reader_read(l_idxReader, std::min(FLAGS_t, 3));
+    mm_idx_reader_close(l_idxReader);
+    g_minimizerNumaList.push_back(l_minimizer);
   }
+  if (FLAGS_use_numa)
+    numa_set_membind(numa_all_nodes_ptr);
+
   LOG_IF(INFO, VLOG_IS_ON(3)) << "Loaded/built the index for " << g_minimizer->n_seq << " target sequence(s)";
   if (argc != 2) {
     mm_mapopt_update(g_mnmpOpt, g_minimizer);
@@ -113,9 +141,14 @@ int main(int argc, char *argv[]) {
   if (FLAGS_v >= 3) {
     mm_idx_stat(g_minimizer);
   }
+
   // Prepare header
   std::string l_headerStr = fc_write_sam_hdr(g_minimizer, FLAGS_R, VERSION, l_cmdStr.str());
   g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
+  // if ((g_mnmpOpt->flag & MM_F_OUT_SAM) &&
+  //     g_idxReader->n_parts == 1          ) {
+  //   // skip header
+  // }
 
   int    l_numSegs = argc - 2;
   char **l_fileName = &argv[2];
@@ -153,7 +186,8 @@ int main(int argc, char *argv[]) {
   l_mnmpPipe.wait();
 
   // Close index file 
-  mm_idx_destroy(g_minimizer);
+  for (mm_idx_t *l_minimizer : g_minimizerNumaList)
+    mm_idx_destroy(l_minimizer);
   mm_idx_reader_close(g_idxReader);
 
   // Stop timer

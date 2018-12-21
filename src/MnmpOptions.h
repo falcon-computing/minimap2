@@ -23,6 +23,8 @@ DECLARE_bool(inorder_output);
 DECLARE_bool(sort);
 DECLARE_bool(bam);
 
+DECLARE_bool(use_numa);
+
 int fc_set_opt(void);
 
 #endif

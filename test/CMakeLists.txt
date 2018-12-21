@@ -7,6 +7,7 @@ add_dependencies(test_minimap Google FalconLM HTS)
 target_link_libraries(test_minimap
   kflow 
   minimap-c
+  numa
   ${Boost_LIBRARIES} 
   ${FalconLM_LIBRARIES}
   ${Google_LIBRARIES}

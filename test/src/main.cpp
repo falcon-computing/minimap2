@@ -25,6 +25,8 @@ mm_idx_t *g_minimizer;
 mm_idx_reader_t *g_idxReader;
 bam_hdr_t *g_bamHeader;
 
+std::vector<mm_idx_t*> g_minimizerNumaList;
+
 extern int    g_numFp;
 extern char **g_fn;
 
