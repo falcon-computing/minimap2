@@ -1,6 +1,7 @@
 .cproject
 .project
 .*.swp
+.*.sw*
 *.a
 *.o
 *.dSYM
