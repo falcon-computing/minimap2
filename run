@@ -1,3 +1,6 @@
+
+#Note: please run this script on us-1, due to input files
+
 rm -rf time.log
 date > time.log
 bash ./minimap2 -ax sr /genome/ref/human_g1k_v37.fasta /genome/fastq/WES/NA12878-Rep01_S1_L001_R1_001.fastq.gz /genome/fastq/WES/NA12878-Rep01_S1_L001_R2_001.fastq.gz -t 24 -R "@RG	ID:NA12878	SM:NA12878	PL:ILLUMINA	LB:NA12878" > NA12878_minimap2.log
