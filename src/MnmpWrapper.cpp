@@ -64,15 +64,15 @@ void fc_map_frag_chain(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_f
   int max_chain_gap_qry, max_chain_gap_ref, is_splice = !!(opt->flag & MM_F_SPLICE), is_sr = !!(opt->flag & MM_F_SR);
   int64_t n_a;
 
-        uint32_t l_hash;
-        mm_reg1_t *l_regs0Arr;
-        int l_numRegs0;
-        uint64_t *l_uArr;
-        uint64_t *l_miniPosArr;
-        mm128_t *l_anchorArr;
-        mm128_v l_mv = {0, 0, 0};
+  uint32_t l_hash;
+  mm_reg1_t *l_regs0Arr;
+  int l_numRegs0;
+  uint64_t *l_uArr;
+  uint64_t *l_miniPosArr;
+  mm128_t *l_anchorArr;
+  mm128_v l_mv = {0, 0, 0};
 
-        int qlen_sum = 0;
+  int qlen_sum = 0;
   for (int l_sg = 0; l_sg < n_segs; ++l_sg)
     qlen_sum += qlens[l_sg], n_regs[l_sg] = 0, regs[l_sg] = 0;
 
@@ -157,7 +157,7 @@ void fc_map_frag_chain(const mm_mapopt_t *opt, const mm_idx_t *mi, const int i_f
   }
   else {
     io_fragExtSOA->m_segChainsArr[i_fragIdx] = mm_seg_gen(NULL, l_hash, n_segs, qlens, l_numRegs0, l_regs0Arr, n_regs, regs, l_anchorArr);
-    kfree(NULL, l_regs0Arr);
+    free(l_regs0Arr); //l_regs0Arr is allocated through original calloc, not from kalloc; refer to `hit.c:74`
     kfree(NULL, l_anchorArr);
   }
   

@@ -34,6 +34,8 @@ DECLARE_string(blaze_conf);
 #endif
 #endif
 
+DECLARE_bool(use_numa);
+
 int fc_set_opt(void);
 
 #endif

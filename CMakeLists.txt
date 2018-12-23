@@ -155,7 +155,8 @@ set (CMAKE_STATIC_LINKER_FLAGS "--as-needed")
 if ( USE_FPGA )
   target_link_libraries(minimap-flow
     minimap-c
-    kflow 
+    kflow
+    numa
     ${Boost_LIBRARIES} 
     ${FalconLM_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
@@ -170,6 +171,7 @@ else()
   target_link_libraries(minimap-flow
     minimap-c
     kflow 
+    numa
     ${Boost_LIBRARIES} 
     ${FalconLM_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}

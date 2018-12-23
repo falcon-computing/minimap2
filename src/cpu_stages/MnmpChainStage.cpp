@@ -4,6 +4,10 @@
 #include <sstream>
 #include <fstream>
 #include <iomanip>
+#include <thread>
+
+#include <sched.h>
+#include <numa.h>
 
 #include "MnmpGlobal.h"
 #include "MnmpOptions.h"
@@ -19,6 +23,21 @@
 
 ChainsBatch MinimapChain::compute(SeqsBatch const &i_seqsBatch) {
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started MinimapChain";
+
+  // A simple HARDCODED routine to determine NUMA node
+  // TODO: parse output of `lscpu -p` to get NUMA node info
+  thread_local const unsigned int C_NUM_TOTAL_CPU  = std::thread::hardware_concurrency();
+  thread_local const int          C_NUM_TOTAL_NODE = (numa_available()==-1) ? 1 : numa_num_configured_nodes();
+  
+  int l_cpuId  = sched_getcpu();
+  int l_coreId = l_cpuId % (C_NUM_TOTAL_CPU/2); // assume USE_SMT:2
+  int l_nodeId = l_coreId / (C_NUM_TOTAL_CPU/2/C_NUM_TOTAL_NODE);
+
+  mm_idx_t *l_minimizer;
+  if (FLAGS_use_numa)
+    l_minimizer = g_minimizerNumaList[l_nodeId];
+  else
+    l_minimizer = g_minimizer;
 
   fragExtSOA *l_fragExtSOA;
   if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
@@ -45,13 +64,13 @@ ChainsBatch MinimapChain::compute(SeqsBatch const &i_seqsBatch) {
     if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
       for (int l_sg = 0; l_sg < i_seqsBatch.m_numSeg[l_fr]; ++l_sg) {
         int l_repLen, l_fragGap;
-        fc_map_frag_chain(g_mnmpOpt, g_minimizer, l_segOff+l_sg, 1, &qlens[l_sg], &qseqs[l_sg], &i_seqsBatch.m_numReg[l_segOff+l_sg], &i_seqsBatch.m_reg[l_segOff+l_sg], i_seqsBatch.m_seqs[l_segOff+l_sg].name, l_fragExtSOA, &l_repLen, &l_fragGap);
+        fc_map_frag_chain(g_mnmpOpt, l_minimizer, l_segOff+l_sg, 1, &qlens[l_sg], &qseqs[l_sg], &i_seqsBatch.m_numReg[l_segOff+l_sg], &i_seqsBatch.m_reg[l_segOff+l_sg], i_seqsBatch.m_seqs[l_segOff+l_sg].name, l_fragExtSOA, &l_repLen, &l_fragGap);
         i_seqsBatch.m_repLen[l_segOff + l_sg] = l_repLen;
         i_seqsBatch.m_fragGap[l_segOff + l_sg] = l_fragGap;
       }
     } else {
       int l_repLen, l_fragGap;
-      fc_map_frag_chain(g_mnmpOpt, g_minimizer, l_fr, i_seqsBatch.m_numSeg[l_fr], qlens, qseqs, &i_seqsBatch.m_numReg[l_segOff], &i_seqsBatch.m_reg[l_segOff], i_seqsBatch.m_seqs[l_segOff].name, l_fragExtSOA, &l_repLen, &l_fragGap);
+      fc_map_frag_chain(g_mnmpOpt, l_minimizer, l_fr, i_seqsBatch.m_numSeg[l_fr], qlens, qseqs, &i_seqsBatch.m_numReg[l_segOff], &i_seqsBatch.m_reg[l_segOff], i_seqsBatch.m_seqs[l_segOff].name, l_fragExtSOA, &l_repLen, &l_fragGap);
       for (int l_sg = 0; l_sg < i_seqsBatch.m_numSeg[l_fr]; ++l_sg) {
         i_seqsBatch.m_repLen[l_segOff + l_sg] = l_repLen;
         i_seqsBatch.m_fragGap[l_segOff + l_sg] = l_fragGap;

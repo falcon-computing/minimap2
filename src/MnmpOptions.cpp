@@ -53,6 +53,9 @@ DEFINE_string(blaze_conf, "",
 #endif
 #endif
 
+DEFINE_bool(use_numa, false,
+                "use NUMA lib for hardware locality");
+
 int fc_set_opt() {
   mm_idxopt_init(g_mnmpIpt);
   mm_mapopt_init(g_mnmpOpt);
