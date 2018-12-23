@@ -19,6 +19,10 @@
 #include <google/protobuf/text_format.h>
 #include "blaze/PlatformManager.h"
 #include "blaze/AppCommManager.h"
+#elif defined(USE_NATIVE)
+#pragma message "Using native FPGA routines for build"
+#else
+#pragma message "Using original C kernels for build"
 #endif
 #endif
 
@@ -136,20 +140,76 @@ int main(int argc, char *argv[]) {
   int    l_numSegs = argc - 2;
   char **l_fileName = &argv[2];
 
+  // Set up Fpga
+#ifdef BUILD_FPGA
+#ifdef LOCAL_BLAZE
+  // Start Blaze Infrastructure
+  blaze::ManagerConf l_blazeConf;
+  blaze::PlatformManager *l_blazePlatform = NULL;
+  blaze::AppCommManager  *l_blazeComm = NULL;
+
+  do {
+    if (!FLAGS_use_fpga)
+      break;
+    
+    int l_confFileHandle = open(FLAGS_blaze_conf.c_str(), O_RDONLY);
+    if (l_confFileHandle < 0) {
+      LOG(ERROR) << "Cannot find configure file for local blaze: " << FLAGS_blaze_conf;
+      LOG(WARNING) << "Not using FPGA acceleration for mmsw";
+      FLAGS_use_fpga = false;
+      break;
+    }
+    google::protobuf::io::FileInputStream l_confFile(l_confFileHandle);
+
+    // config manager
+    if (!google::protobuf::TextFormat::Parse(&l_confFile, &l_blazeConf)) {
+      LOG(ERROR) << "Cannot parse protobuf message";
+      LOG(WARNING) << "Not using FPGA acceleration for mmsw";
+      FLAGS_use_fpga = false;
+      break;
+    }
+    FLAGS_v = std::max(FLAGS_v, l_blazeConf.verbose());
+    // DLOG(INFO) << l_blazeConf.DebugString();
+  } while (0);
+  
+  // start manager
+  if (FLAGS_use_fpga) {
+    l_blazePlatform = new blaze::PlatformManager(&l_blazeConf);
+    l_blazeComm = new blaze::AppCommManager(l_blazePlatform, "127.0.0.1", 1027);
+
+    // Reduce one thread for Blaze manager
+    l_numThreads = std::max(l_numThreads-1, 1);
+  }
+#elif defined(USE_NATIVE)
+  // Only check bitstream file in native FPGA mode
+  if (FLAGS_use_fpga) {
+    boost::filesystem::wpath l_btsm(FLAGS_fpga_path);
+    if (FLAGS_use_fpga && !boost::filesystem::exists(l_btsm)) {
+      LOG(ERROR) << "Cannot find FPGA bitstream file: " << FLAGS_fpga_path;
+      LOG(WARNING) << "Not using FPGA acceleration";
+      FLAGS_use_fpga = false;
+    }
+  }
+#endif
+  if (!FLAGS_use_fpga && FLAGS_fpga_only) {
+    LOG(ERROR) << "Cannot enable CPU or FPGA for computation "
+               << "(CPU is disabled due to \"--fpga_only\" option)";
+    return -1;
+  }
+#endif
+
+  l_numThreads = std::max(l_numThreads-FLAGS_extra_threads, 1);
+
   // Construct execution pipeline
   SeqsRead         l_readStg(l_numSegs, l_fileName); 
-  MinimapOriginMap l_oriMapStg(l_numThreads);
   MinimapChain     l_chainStg(l_numThreads);
   MinimapAlign     l_alignStg(l_numThreads);
   Reorder          l_reordStg;
   CoordSort        l_sortStg(l_numThreads);
-#if 0
-  SeqsWrite        l_writeStg(l_numThreads, l_cmdStr.str());
-#endif
   SeqsWrite        l_writeStg(l_numThreads);
 
 #ifdef BUILD_FPGA
-  MinimapAlignFpga l_alignFpgaStg(1);
+  MinimapAlignFpga l_alignFpgaStg(FLAGS_fpga_threads);
 #endif
 
   int l_numStages = 6;
@@ -158,43 +218,25 @@ int main(int argc, char *argv[]) {
 
   int l_stg = 0;
   l_auxPipe.addStage(l_stg++, &l_readStg);
-  //l_auxPipe.addStage(l_stg++, &l_oriMapStg);
   l_auxPipe.addStage(l_stg++, &l_chainStg);
 #ifndef BUILD_FPGA
   l_auxPipe.addStage(l_stg++, &l_alignStg);
 #else
-  l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
+  if (!FLAGS_fpga_only)
+    l_auxPipe.addStage(l_stg++, &l_alignStg);
+  else
+    l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
 #endif
   l_auxPipe.addStage(l_stg++, &l_reordStg);
   l_auxPipe.addStage(l_stg++, &l_sortStg);
   l_auxPipe.addStage(l_stg++, &l_writeStg);
-  
-  l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
 #ifdef BUILD_FPGA
-#ifdef LOCAL_BLAZE
-  // Start Blaze Infrastructure
-  int l_confFileHandle = open(FLAGS_blaze_conf.c_str(), O_RDONLY);
-  if (l_confFileHandle < 0) {
-    LOG(ERROR) << "Cannot find configure file for local blaze: " << FLAGS_blaze_conf;
-    return -1;
-  }
-
-  google::protobuf::io::FileInputStream l_confFile(l_confFileHandle);
-
-  // config manager
-  blaze::ManagerConf l_blazeConf;
-  if (!google::protobuf::TextFormat::Parse(&l_confFile, &l_blazeConf)) {
-    throw std::runtime_error("cannot parse protobuf message");
-  }
-  FLAGS_v = std::max(FLAGS_v, l_blazeConf.verbose());
-  DLOG(INFO) << l_blazeConf.DebugString();
-
-  // start manager
-  blaze::PlatformManager l_blazePlatform(&l_blazeConf);
-  blaze::AppCommManager l_blazeComm(&l_blazePlatform, "127.0.0.1", 1027); 
+  if (FLAGS_use_fpga && !FLAGS_fpga_only)
+    l_auxPipe.addAccxBckStage(2, &l_alignFpgaStg);
 #endif
-#endif
+
+  l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
   // Run pipeline
   l_mnmpPipe.start();
@@ -219,5 +261,13 @@ int main(int argc, char *argv[]) {
   std::cerr << "Real time: " << l_endTime - l_startTime << " sec, "
             << "CPUD time: " << cputime() << " sec" << std::endl;
 
+#ifdef BUILD_FPGA
+#ifdef LOCAL_BLAZE
+  if (l_blazeComm != NULL)
+    delete l_blazeComm;
+  if (l_blazePlatform != NULL)
+    delete l_blazePlatform; 
+#endif
+#endif
   return 0;
 }

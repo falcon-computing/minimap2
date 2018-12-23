@@ -17,4 +17,4 @@ set_target_properties(${proj_name}
   PROPERTIES OUTPUT_NAME MnmpSWTask)
 
 install(TARGETS MnmpSWTask_xlnx
-    LIBRARY DESTINATION mmsw_task/xlnx)
+  LIBRARY DESTINATION mmsw_task/xlnx)

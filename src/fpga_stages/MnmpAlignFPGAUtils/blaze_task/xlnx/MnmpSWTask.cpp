@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdexcept>
 #include <time.h>
+#include <string>
 
 #include <glog/logging.h>
 
@@ -23,7 +24,7 @@ cl_mem    MnmpSW::ref_buffer_ = NULL;
 cl_mem    MnmpSW::mmi_buffer_ = NULL;
 
 
-MnmpSW::MnmpSW(): blaze::Task(6)//, timer_("MnmpSW Task")
+MnmpSW::MnmpSW(): blaze::Task(NUM_INPUT_ARGS)//, timer_("MnmpSW Task")
 {
   ;
 }
@@ -33,10 +34,14 @@ MnmpSW::~MnmpSW() {
     // push back the scratch blocks to TaskEnv
     env->putScratch("input",  input_);
     env->putScratch("output", output_);
+#ifndef DUPLICATE_OUTPUT
+    env->putScratch("token", output_token_);
+#endif
   }
 }
 
 void MnmpSW::setupIndex(uint32_t* opt_data, uint32_t num_ref_seq, uint64_t* ref_data, uint32_t* mmi_data) {
+  DLOG(INFO) << "SET INDEX";
   mtx_.lock();
   if (index_init_) {
     mtx_.unlock();
@@ -116,17 +121,25 @@ void MnmpSW::prepare() {
   
   env = (blaze::OpenCLEnv*)getEnv();
 
-  cur_batch_size_ = *((int*)getInput(0));
-  fpga_inputs *in_data = (fpga_inputs *)getInput(1);
+  // Use pointers as inputs for local mode
+  cur_batch_size_           = *((int*)getInput(0));
+  fpga_inputs *in_data      = *(fpga_inputs **)getInput(1);
 
-  uint32_t *opt_data = (uint32_t *)getInput(2);
-  num_ref_seq_ = *((uint32_t*)getInput(3));
-  uint64_t *ref_data = (uint64_t *)getInput(4);
-  uint32_t *mmi_data = *((uint32_t **)getInput(5));
+  uint32_t    *opt_data     = *(uint32_t **)getInput(2);
+               num_ref_seq_ = *((uint32_t*)getInput(3));
+  uint64_t    *ref_data     = *(uint64_t **)getInput(4);
+  uint32_t    *mmi_data     = *((uint32_t **)getInput(5));
+
+#ifndef DUPLICATE_OUTPUT
+               out_data_    = *((fpga_outputs **)getInput(6));
+#endif
 
   // getting configurations and prepare fpga input
-  int input_bank  = 0;  
-  int output_bank = 0;
+  std::string string_buf;
+  get_conf("inBankID", string_buf);
+  int input_bank = std::stoi(string_buf);
+  get_conf("outBankID", string_buf);
+  int output_bank = std::stoi(string_buf);
 
   // init index if necessary
   if (!index_init_) {
@@ -137,8 +150,8 @@ void MnmpSW::prepare() {
   {
     //PLACE_TIMER1("create input buffer");
     if (!env->getScratch("input", input_)) {
-      MnmpSWBuffer_ptr input(new MnmpSWBuffer(env, input_bank, sizeof(fpga_inputs)));
-      input_ = input;
+      MnmpSWBuffer_ptr l_input(new MnmpSWBuffer(env, input_bank, sizeof(fpga_inputs)));
+      input_ = l_input;
       DLOG(INFO) << "Creating a new MnmpSWBuffer for input";
     }
     else {
@@ -147,6 +160,7 @@ void MnmpSW::prepare() {
   }
 
   // allocate output buffer
+#ifdef DUPLICATE_OUTPUT
   blaze::ConfigTable_ptr output_conf(new blaze::ConfigTable());
   output_conf->write_conf("bankID", output_bank);
 
@@ -161,6 +175,28 @@ void MnmpSW::prepare() {
     }
     setOutput(0, output_);
   }
+#else
+  {
+    //PLACE_TIMER1("create output buffer");
+    if (!env->getScratch("output", output_)) {
+      MnmpSWBuffer_ptr l_output(new MnmpSWBuffer(env, output_bank, sizeof(fpga_outputs)));
+      output_ = l_output;
+      DLOG(INFO) << "Creating a new MnmpSWBuffer for output";
+    }
+    else {
+      DLOG(INFO) << "Getting a MnmpSWBuffer for output from Scratch";
+    }
+
+    blaze::ConfigTable_ptr token_conf(new blaze::ConfigTable());
+    if (!env->getScratch("token", output_token_)) {
+      blaze::DataBlock_ptr token(new blaze::DataBlock(1, 1, sizeof(int), 0,
+                                                      blaze::DataBlock::OWNED, 
+                                                      token_conf));
+      output_token_ = token;
+    }
+    setOutput(0, output_token_);
+  }
+#endif
 
   // write input buffer
   cl_int err = 0;
@@ -173,10 +209,11 @@ void MnmpSW::prepare() {
   {
     //PLACE_TIMER1("write_buffer");
     cl_event event;
-    cl_int err = clEnqueueWriteBuffer(command, input_->buf, CL_TRUE,\
-                    0, sizeof(align_input) * cur_batch_size_, (uint32_t*)in_data , 0, NULL, &event);
+    cl_int err = clEnqueueWriteBuffer(command, input_->buf, CL_TRUE, 
+                  0, sizeof(align_input) * cur_batch_size_, (uint32_t*)in_data ,
+                  0, NULL, &event);
     if (err != CL_SUCCESS) {
-      throw std::runtime_error("failed to migrate input buffer");
+      throw std::runtime_error("failed to write input buffer");
     }
     clWaitForEvents(1, &event);
     clReleaseEvent(event);
@@ -201,18 +238,37 @@ void MnmpSW::compute() {
   err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &ref_buffer_);
   err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &mmi_buffer_);
   err |= clSetKernelArg(kernel, 4, sizeof(cl_mem), &input_->buf);
+#ifdef DUPLICATE_OUTPUT
   err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), (cl_mem*)output_->getData());
+#else
+  err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), &output_->buf);
+#endif
   err |= clSetKernelArg(kernel, 6, sizeof(int), &cur_batch_size_);
 
   // uint64_t w_start = blaze::getUs();
 
   { //PLACE_TIMER1(kernel_name + " kernel");
-  cl_event event;
-  cl_int err = clEnqueueTask(command, kernel, 0, NULL, &event);
-  if (err != CL_SUCCESS) {
-    throw std::runtime_error("failed to enqueue kernel");
+    cl_int err = clEnqueueTask(command, kernel, 0, NULL, &event);
+    if (err != CL_SUCCESS) {
+      throw std::runtime_error("failed to enqueue kernel");
   }
   clWaitForEvents(1, &event);
+  
+#ifndef DUPLICATE_OUTPUT
+  cl_event event2;
+  { //PLACE_TIMER1("read_buffer");
+    cl_int err = clEnqueueReadBuffer(command, output_->buf, CL_TRUE,
+                  0, sizeof(align_output) * cur_batch_size_, (uint32_t*)out_data_,
+                  1, &event, &event2);
+    if (err != CL_SUCCESS) {
+      throw std::runtime_error("failed to read result buffer");
+    }
+  }
+  clWaitForEvents(1, &event2);
+
+  int ret = 1;
+  output_token_->writeData(&ret, sizeof(int));
+#endif
 
 // #ifndef NO_PROFILE
 //   cl_ulong k_start, k_end;
@@ -225,5 +281,8 @@ void MnmpSW::compute() {
 // #endif
 
   clReleaseEvent(event);
+#ifndef DUPLICATE_OUTPUT
+  clReleaseEvent(event2);
+#endif
   }
 }

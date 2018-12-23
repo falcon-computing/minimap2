@@ -7,36 +7,39 @@
 using namespace blaze;
 
 MnmpSWClient::MnmpSWClient(uint32_t* opt_data, uint32_t num_ref_seq, uint64_t* ref_data, uint32_t* mmi_data): 
-  blaze::Client("MnmpSW", 6, 1)
+  blaze::Client("MnmpSW", NUM_INPUT_ARGS, 1)
 {
-  // skip input 0 for num_regions
-  createInput(1, 1, sizeof(fpga_inputs), 1); // fpga_inputs
-
-  createInput(2, 1, sizeof(mm_mapopt_t_union), 1); // options
-  memcpy(getInputPtr(2), opt_data, sizeof(mm_mapopt_t_union));
+  opt_data_    = opt_data;
   num_ref_seq_ = num_ref_seq;
+  ref_data_    = ref_data;
+  mmi_data_    = mmi_data;
+
+  setInput(2, &opt_data_,    1, 1, sizeof(uint32_t*));
   setInput(3, &num_ref_seq_, 1, 1, sizeof(uint32_t));
-  createInput(4, 1, sizeof(uint64_t) * num_ref_seq_ * 2, 1); // references
-  memcpy(getInputPtr(4), ref_data, sizeof(uint64_t)*num_ref_seq_*2);
-  createInput(5, 1, sizeof(uint32_t*), 1); // minimizers
-  memcpy(getInputPtr(5), &mmi_data, sizeof(uint32_t*));
-  // memcpy(getInputPtr(5), mmi_data, MAX_REF_SIZE);
+  setInput(4, &ref_data_,    1, 1, sizeof(uint64_t*));
+  setInput(5, &mmi_data,     1, 1, sizeof(uint32_t*));
 }
 
 
 void MnmpSWClient::setup(
     std::vector<align_input>& inputs,
+#ifndef DUPLICATE_OUTPUT
+    std::vector<align_output>& outputs,
+#endif
     int num_region) 
 {
   PLACE_TIMER;
   num_region_ = num_region;
+  inputs_data_ = (fpga_inputs*)inputs.data();
 
-  uint64_t total_rl = 0;
-  uint64_t total_hl = 0;
+  setInput(0, &num_region_,  1, 1, sizeof(int));
+  setInput(1, &inputs_data_, 1, 1, sizeof(fpga_inputs*));
+  // memcpy(getInputPtr(1), inputs.data(), sizeof(align_input)*num_region_);
 
-  setInput(0, &num_region_, 1, 1, sizeof(int));
-  memcpy(getInputPtr(1), inputs.data(), sizeof(align_input)*num_region_);
-  // memcpy(getInputPtr(1), inputs.data(), sizeof(fpga_inputs));
+#ifndef DUPLICATE_OUTPUT
+  outputs_data_ = (fpga_outputs*)outputs.data();
+  setInput(6, &outputs_data_, 1, 1, sizeof(fpga_outputs*));
+#endif
 }
 
 // load balance compute routine

@@ -22,11 +22,13 @@ DECLARE_int32(output_size);
 DECLARE_bool(inorder_output);
 DECLARE_bool(sort);
 DECLARE_bool(bam);
+DECLARE_int32(extra_threads);
 
 #ifdef BUILD_FPGA
 DECLARE_bool(use_fpga);
+DECLARE_bool(fpga_only);
+DECLARE_int32(fpga_threads);
 DECLARE_string(fpga_path);
-
 #ifdef LOCAL_BLAZE
 DECLARE_string(blaze_conf);
 #endif

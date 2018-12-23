@@ -349,11 +349,7 @@ void MinimapAlignFpga::compute(int i_workerId) {
   long tl_totalNumFragsOnFPGA = 0;
   DLOG(INFO) << ALIGN_WORKER_MSG(i_workerId) << "Initialized FPGA worker for Alignment";
 
-#ifndef LOCAL_BLAZE
-  std::string l_btsm = "/curr/jyqiu/workspace/minimap2_release/mmsw_kernel_xilinx_vcu1525_dynamic_5_1_1211.xclbin";
-  mmsw_fpga_init(g_mnmpOpt, &l_btsm[0], g_minimizer);
-  DLOG(INFO) << "Initialized FPGA";
-#else
+#ifdef LOCAL_BLAZE
   mm_mapopt_t_union* l_fpgaOpt = (mm_mapopt_t_union*)new mm_mapopt_t_union;
   mm_idx_fpga*       l_fpgaIdx = (mm_idx_fpga*)new mm_idx_fpga; 
 
@@ -361,6 +357,10 @@ void MinimapAlignFpga::compute(int i_workerId) {
   ref_conversion(g_minimizer, l_fpgaIdx);
 
   MnmpSWClient l_client(l_fpgaOpt->serial, l_fpgaIdx->n_seq, l_fpgaIdx->seqs, l_fpgaIdx->S);
+#elif defined(USE_NATIVE)
+  std::string l_btsm = FLAGS_fpga_path;
+  mmsw_fpga_init(g_mnmpOpt, &l_btsm[0], g_minimizer);
+  DLOG(INFO) << "Initialized FPGA";
 #endif
 
   const int l_fpgaChunkSize = 2048;
@@ -445,15 +445,21 @@ void MinimapAlignFpga::compute(int i_workerId) {
 
       // Invoke kernel
       DLOG_IF(INFO, VLOG_IS_ON(3)) << ALIGN_WORKER_MSG(i_workerId) << "Call kernel for buffer " << l_bufferIdx;
-      // mmsw_orig_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
-      // double c, d;
-      // mmsw_baseline_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx], c, d);
-#ifndef LOCAL_BLAZE
-      mmsw_fpga_compute(&l_btsm[0], g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
-#else
-      MnmpSWWorker l_worker(&l_client, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkInput[l_bufferIdx].size());
+
+#ifdef LOCAL_BLAZE
+      int l_chunkSize = l_fpgaChunkInput[l_bufferIdx].size();
+      MnmpSWWorker l_worker(&l_client,
+                            l_fpgaChunkInput[l_bufferIdx],
+                            l_fpgaChunkOutput[l_bufferIdx],
+                            l_chunkSize);
       l_worker.run();
       l_worker.getOutput(l_fpgaChunkOutput[l_bufferIdx]);
+#elif defined(USE_NATIVE)
+      mmsw_fpga_compute(&l_btsm[0], g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
+#else
+      mmsw_orig_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
+      // double c, d;
+      // mmsw_baseline_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx], c, d);
 #endif
 
       // Switch buffer: NO USE PING-PONG BUFFER IF UNCOMMENTED
@@ -509,15 +515,20 @@ void MinimapAlignFpga::compute(int i_workerId) {
     if (l_fpgaChunkInput[l_bufferIdx].size() > 0) {
       // Do alignment on FPGA for a inputs number large enough 
       if (l_fpgaChunkInput[l_bufferIdx].size() >= 256) {
-        // mmsw_orig_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
+#ifdef LOCAL_BLAZE
+        int l_chunkSize = l_fpgaChunkInput[l_bufferIdx].size();
+        MnmpSWWorker l_worker(&l_client,
+                              l_fpgaChunkInput[l_bufferIdx],
+                              l_fpgaChunkOutput[l_bufferIdx],
+                              l_chunkSize);
+        l_worker.run();
+        l_worker.getOutput(l_fpgaChunkOutput[l_bufferIdx]);
+#elif defined(USE_NATIVE)
+        mmsw_fpga_compute(&l_btsm[0], g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
+#else
+        mmsw_orig_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
         // double a, b;
         // mmsw_baseline_compute(g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx], a, b);
-#ifndef LOCAL_BLAZE
-      mmsw_fpga_compute(&l_btsm[0], g_mnmpOpt, g_minimizer, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkOutput[l_bufferIdx]);
-#else
-      MnmpSWWorker l_worker(&l_client, l_fpgaChunkInput[l_bufferIdx], l_fpgaChunkInput[l_bufferIdx].size());
-      l_worker.run();
-      l_worker.getOutput(l_fpgaChunkOutput[l_bufferIdx]);
 #endif
       }
       else {
@@ -597,13 +608,13 @@ void MinimapAlignFpga::compute(int i_workerId) {
 
   }
 
-#ifndef LOCAL_BLAZE
-  mmsw_fpga_destroy();
-#else
+#ifdef LOCAL_BLAZE
   if (!l_fpgaOpt)
     delete l_fpgaOpt;
   if (!l_fpgaIdx) 
     delete l_fpgaIdx;
+#elif defined(USE_NATIVE)
+  mmsw_fpga_release();
 #endif
 
   DLOG(INFO) << ALIGN_WORKER_MSG(i_workerId) << "Retired FPGA worker for Alignment";

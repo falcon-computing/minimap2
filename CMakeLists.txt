@@ -20,14 +20,21 @@ find_package( Google       REQUIRED )
 find_package( FalconLM     REQUIRED )
 find_package( HTS        REQUIRED )
 
-if ( DEFINED ENV{XILINX_SDX} )
+# build option
+option( USE_FPGA   "Build with FPGA"                        ON )
+option( USE_BLAZE  "Build with Blaze"                       ON )
+option( USE_NATIVE "Build with native FPGA routines"        OFF)
+option( USE_CKERNEL   "Build with original C code for kernels" OFF)
+# priority: USE_BLAZE < USE_NATIVE < USE_CKERNEL
+
+if ( DEFINED ENV{XILINX_SDX} AND USE_FPGA)
  set( USE_FPGA On )
  set( FPGA_TYPE "xlnx" )
  find_package( Xilinx REQUIRED )
  set( FPGA_INCLUDE_DIRS "${Xilinx_INCLUDE_DIRS}" )
  set( FPGA_LIBRARY_DIRS "${Xilinx_LIBRARY_DIRS}")
  set( FPGA_LIBRARIES "${Xilinx_LIBRARIES}")
-#elseif ( DEFINED ENV{ALTERAOCLSDKROOT} )
+#elseif ( DEFINED ENV{ALTERAOCLSDKROOT} AND USE_FPGA)
 #  set( USE_FPGA On )
 #  set( FPGA_TYPE "intel" )
 #  find_package( IntelAltera REQUIRED )
@@ -66,17 +73,28 @@ endif()
 
 
 # get code version
-##execute_process( COMMAND
-##  git describe --tags --always
-##  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-##  OUTPUT_VARIABLE GIT_VERSION
-##  OUTPUT_STRIP_TRAILING_WHITESPACE )
+execute_process( COMMAND git describe --tags
+  COMMAND  sed "s/\\(.*\\)-.*/\\1/"
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  OUTPUT_VARIABLE GIT_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE )
+set(BIN_VERSION "${GIT_VERSION}")
 
-##set(BIN_VERSION "${GIT_VERSION}")
-set(BIN_VERSION "init")
+
 if ( USE_FPGA )
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FPGA" )
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLOCAL_BLAZE" )
+  if ( USE_CKERNEL )
+    message( STATUS "Build with original C kernel for FPGA" )
+    set(USE_NATIVE OFF)
+    set(USE_BLAZE OFF)
+  elseif ( USE_NATIVE )
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_NATIVE" )
+    message( STATUS "Build with OpenCL routine for FPGA" )
+    set(USE_BLAZE OFF)
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLOCAL_BLAZE" )
+    message( STATUS "Build with Blaze library for FPGA" )
+  endif()
 
   set(BIN_VERSION "${BIN_VERSION}-${FPGA_TYPE}")
   if ( ${FPGA_TYPE} MATCHES "xlnx" )
