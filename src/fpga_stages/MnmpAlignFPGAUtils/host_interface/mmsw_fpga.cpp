@@ -47,7 +47,7 @@ void ref_conversion(const mm_idx_t* mi, mm_idx_fpga* idx) {
     uint64_t sum_len = 0;
     idx->n_seq = mi->n_seq;
     for (int i = 0; i < mi->n_seq; ++i) {
-		mm_idx_seq_t *s = &mi->seq[i];
+    mm_idx_seq_t *s = &mi->seq[i];
         idx->seqs[2 * i] = s->offset;
         idx->seqs[2 * i + 1] = ((uint64_t)i << 32) | (uint64_t)s->len;
         sum_len += s->len;

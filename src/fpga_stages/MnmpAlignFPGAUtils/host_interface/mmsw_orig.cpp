@@ -14,7 +14,7 @@ void mmsw_orig_compute(const mm_mapopt_t* opt, const mm_idx_t* mi, std::vector<a
     for (int i = 0; i < inputs.size(); ++i) {
         align_output cur_output;
         ksw_extz_t ez;
-     	memset(&ez, 0, sizeof(ksw_extz_t));
+       memset(&ez, 0, sizeof(ksw_extz_t));
         uint8_t *qseq_ptr[2];
         qseq_ptr[0] = inputs[i].qseq[0];
         qseq_ptr[1] = inputs[i].qseq[1];
@@ -22,11 +22,13 @@ void mmsw_orig_compute(const mm_mapopt_t* opt, const mm_idx_t* mi, std::vector<a
         ez.m_cigar = MAX_SEQ_LENGTH; 
         mm_align1(NULL, opt, mi, inputs[i].qlen, qseq_ptr, \
                 &(inputs[i].region[0].orig), &(inputs[i].region[1].orig), \
-                inputs[i].n_a, inputs[i].a, &ez, 0);
+                inputs[i].n_a, inputs[i].a, &ez, opt->flag);
         cur_output.region[0] = inputs[i].region[0];   
         cur_output.region[1] = inputs[i].region[1];   
         cur_output.p = *(inputs[i].region[0].orig.p);
-        memcpy(cur_output.cigar, inputs[i].region[0].orig.p->cigar, sizeof(uint32_t) * inputs[i].region[0].orig.p->n_cigar); 
+        memcpy(cur_output.cigar, inputs[i].region[0].orig.p->cigar, sizeof(uint32_t) * inputs[i].region[0].orig.p->n_cigar);
+        // fix memory leakage
+        free(inputs[i].region[0].orig.p);
         outputs.push_back(cur_output);
     }
     // destroy_km(km);

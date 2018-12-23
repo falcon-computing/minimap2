@@ -47,23 +47,23 @@
 
 
 typedef struct {
-	uint32_t capacity;                  // the capacity of cigar[]
-	int32_t dp_score, dp_max, dp_max2;  // DP score; score of the max-scoring segment; score of the best alternate mappings
-	//uint32_t n_ambi:30, trans_strand:2; // number of ambiguous bases; transcript strand: 0 for unknown, 1 for +, 2 for -
-	uint32_t n_ambi;
+  uint32_t capacity;                  // the capacity of cigar[]
+  int32_t dp_score, dp_max, dp_max2;  // DP score; score of the max-scoring segment; score of the best alternate mappings
+  //uint32_t n_ambi:30, trans_strand:2; // number of ambiguous bases; transcript strand: 0 for unknown, 1 for +, 2 for -
+  uint32_t n_ambi;
     uint32_t trans_strand;
     uint32_t n_cigar;                   // number of cigar operations in cigar[]
     uint32_t cigar[MAX_SEQ_LENGTH];
 } cigar_info;
 
 typedef struct {
-	uint32_t max:31, zdropped:1;
-	int max_q, max_t;      // max extension coordinate
-	int mqe, mqe_t;        // max score when reaching the end of query
-	int mte, mte_q;        // max score when reaching the end of target
-	int score;             // max score reaching both ends; may be KSW_NEG_INF
-	int m_cigar, n_cigar;
-	int reach_end;
+  uint32_t max:31, zdropped:1;
+  int max_q, max_t;      // max extension coordinate
+  int mqe, mqe_t;        // max score when reaching the end of query
+  int mte, mte_q;        // max score when reaching the end of target
+  int score;             // max score reaching both ends; may be KSW_NEG_INF
+  int m_cigar, n_cigar;
+  int reach_end;
     //uint32_t* cigar;
 } extz_t;
 
@@ -73,18 +73,18 @@ typedef struct {
 } anchor_t;
 
 typedef struct {
-	int32_t id;             // ID for internal uses (see also parent below)
-	int32_t cnt;            // number of minimizers; if on the reverse strand
-	int32_t rid;            // reference index; if this is an alignment from inversion rescue
-	int32_t score;          // DP alignment score
-	int32_t qs, qe, rs, re; // query start and end; reference start and end
-	int32_t parent, subsc;  // parent==id if primary; best alternate mapping score
-	int32_t as;             // offset in the a[] array (for internal uses only)
-	int32_t mlen, blen;     // seeded exact match length; seeded alignment block length
-	int32_t n_sub;          // number of suboptimal mappings
-	int32_t score0;         // initial chaining score (before chain merging/spliting)
-	//uint32_t mapq:8, split:2, rev:1, inv:1, sam_pri:1, proper_frag:1, pe_thru:1, seg_split:1, seg_id:8, split_inv:1, dummy:7;
-	uint32_t mapq;
+  int32_t id;             // ID for internal uses (see also parent below)
+  int32_t cnt;            // number of minimizers; if on the reverse strand
+  int32_t rid;            // reference index; if this is an alignment from inversion rescue
+  int32_t score;          // DP alignment score
+  int32_t qs, qe, rs, re; // query start and end; reference start and end
+  int32_t parent, subsc;  // parent==id if primary; best alternate mapping score
+  int32_t as;             // offset in the a[] array (for internal uses only)
+  int32_t mlen, blen;     // seeded exact match length; seeded alignment block length
+  int32_t n_sub;          // number of suboptimal mappings
+  int32_t score0;         // initial chaining score (before chain merging/spliting)
+  //uint32_t mapq:8, split:2, rev:1, inv:1, sam_pri:1, proper_frag:1, pe_thru:1, seg_split:1, seg_id:8, split_inv:1, dummy:7;
+  uint32_t mapq;
     uint32_t split;
     uint32_t rev;
     uint32_t inv;
@@ -95,8 +95,8 @@ typedef struct {
     uint32_t seg_id;
     uint32_t split_inv;
     uint32_t dummy;
-	uint32_t hash;
-	float div;
+  uint32_t hash;
+  float div;
 } region_t;
 
 typedef union {
@@ -105,42 +105,42 @@ typedef union {
 }float_union;
 
 typedef struct {
-	int seed;
-	int sdust_thres; // score threshold for SDUST; 0 to disable
-	int flag;        // see MM_F_* macros
+  int seed;
+  int sdust_thres; // score threshold for SDUST; 0 to disable
+  int flag;        // see MM_F_* macros
 
-	int bw;          // bandwidth
-	int max_gap, max_gap_ref; // break a chain if there are no minimizers in a max_gap window
-	int max_frag_len;
-	int max_chain_skip;
-	int min_cnt;         // min number of minimizers on each chain
-	int min_chain_score; // min chaining score
+  int bw;          // bandwidth
+  int max_gap, max_gap_ref; // break a chain if there are no minimizers in a max_gap window
+  int max_frag_len;
+  int max_chain_skip;
+  int min_cnt;         // min number of minimizers on each chain
+  int min_chain_score; // min chaining score
 
-	float mask_level;
-	float pri_ratio;
-	int best_n;      // top best_n chains are subjected to DP alignment
+  float mask_level;
+  float pri_ratio;
+  int best_n;      // top best_n chains are subjected to DP alignment
 
-	int max_join_long, max_join_short;
-	int min_join_flank_sc;
-	float min_join_flank_ratio;
+  int max_join_long, max_join_short;
+  int min_join_flank_sc;
+  float min_join_flank_ratio;
 
-	int a, b, q, e, q2, e2; // matching score, mismatch, gap-open and gap-ext penalties
-	int sc_ambi; // score when one or both bases are "N"
-	int noncan;      // cost of non-canonical splicing sites
-	int zdrop, zdrop_inv;   // break alignment if alignment score drops too fast along the diagonal
-	int end_bonus;
-	int min_dp_max;  // drop an alignment if the score of the max scoring segment is below this threshold
-	int min_ksw_len;
-	int anchor_ext_len, anchor_ext_shift;
-	float max_clip_ratio; // drop an alignment if BOTH ends are clipped above this ratio
+  int a, b, q, e, q2, e2; // matching score, mismatch, gap-open and gap-ext penalties
+  int sc_ambi; // score when one or both bases are "N"
+  int noncan;      // cost of non-canonical splicing sites
+  int zdrop, zdrop_inv;   // break alignment if alignment score drops too fast along the diagonal
+  int end_bonus;
+  int min_dp_max;  // drop an alignment if the score of the max scoring segment is below this threshold
+  int min_ksw_len;
+  int anchor_ext_len, anchor_ext_shift;
+  float max_clip_ratio; // drop an alignment if BOTH ends are clipped above this ratio
 
-	int pe_ori, pe_bonus;
+  int pe_ori, pe_bonus;
 
-	float mid_occ_frac;  // only used by mm_mapopt_update(); see below
-	int32_t min_mid_occ;
-	int32_t mid_occ;     // ignore seeds with occurrences above this threshold
-	int32_t max_occ;
-	int mini_batch_size; // size of a batch of query bases to process in parallel
+  float mid_occ_frac;  // only used by mm_mapopt_update(); see below
+  int32_t min_mid_occ;
+  int32_t mid_occ;     // ignore seeds with occurrences above this threshold
+  int32_t max_occ;
+  int mini_batch_size; // size of a batch of query bases to process in parallel
 } opt_t;
 
 typedef union {

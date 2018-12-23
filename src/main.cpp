@@ -28,7 +28,9 @@
 #include "MnmpOptions.h"
 #include "MnmpWrapper.h"
 #include "MnmpCpuStages.h"
+#ifdef BUILD_FPGA
 #include "MnmpFpgaStages.h"
+#endif
 
 mm_mapopt_t *g_mnmpOpt;
 mm_idxopt_t *g_mnmpIpt;

@@ -39,6 +39,7 @@ bool packInput(int const           i_fragIdx,
 {
   extern unsigned char seq_nt4_table[256];
 
+  thread_local std::vector<mm_reg1_t>  tl_regionBuffer;
   thread_local std::queue<align_input> tl_packBuffer;
   thread_local int                     tl_queryLens[MM_MAX_SEG];
   thread_local char const *            tl_querySeqs[MM_MAX_SEG];
@@ -52,11 +53,20 @@ bool packInput(int const           i_fragIdx,
     tl_querySeqs[l_sg] = i_segSeqs[l_sg].seq;
   }
   
+  int l_regOff = 0;
+  tl_regionBuffer.clear();
   for (int l_sg = 0; i_numSegs > 1 && l_sg < i_numSegs; l_sg++) {
     /* the number of  regions of a segment in the fragment, aka a sequence in the pair */
     int         l_numRegs = io_numRegsOfSgmArr[l_sg];
+
+    // duplicate regions to avoid touching original ones
+    for (int l_rg = 0; l_rg < l_numRegs; l_rg++)
+      tl_regionBuffer.push_back(io_regsOfSgmArr[l_sg][l_rg]);
+
     /* pointer to regions of a segment in the fragment, aka a sequence in the pair */
-    mm_reg1_t * l_regs    = io_regsOfSgmArr[l_sg];
+    mm_reg1_t * l_regs    = &tl_regionBuffer[l_regOff];
+
+    l_regOff += l_numRegs;
 
     // update mm_reg1_t::parent (original scope: mm_map_frag/fc_map_frag_align)
     mm_set_parent(NULL,
@@ -75,6 +85,7 @@ bool packInput(int const           i_fragIdx,
     if (l_numAnchors > MAX_ANKOR_NUM) {
       std::queue<align_input> l_emptyQ;
       std::swap(tl_packBuffer, l_emptyQ);
+      tl_regionBuffer.clear();
       return false;
     }
 
@@ -126,6 +137,8 @@ bool packInput(int const           i_fragIdx,
       tl_packBuffer.pop();
     }
   }
+
+  tl_regionBuffer.clear();
   
   return true;
 }
@@ -165,21 +178,25 @@ bool unpackOutput(int const           i_fragIdx,
       if (!l_needAlign) {
         l_alignInput  = &i_alignInputs[l_resOff];
         l_alignOutput = &i_alignOutputs[l_resOff++];
-        // l_reg = &( io_regsOfSgmArr[l_sg][l_rg] );
+
+        mm_extra_t * l_originP = l_reg->p;
         *l_reg = l_alignOutput->region[0].orig;
 
         size_t l_cigarSize = l_alignOutput->p.n_cigar*sizeof(uint32_t);
-        l_reg->p = (mm_extra_t*)realloc(l_reg->p, sizeof(mm_extra_t)+l_cigarSize);
+        if (__builtin_expect(l_originP == NULL, 1))
+          l_reg->p = (mm_extra_t*)malloc(sizeof(mm_extra_t)+l_cigarSize);
+        else
+          l_reg->p = (mm_extra_t*)realloc(l_originP, sizeof(mm_extra_t)+l_cigarSize);
         *(l_reg->p) = l_alignOutput->p;
-        memcpy(l_reg->p->cigar, l_alignOutput->cigar, l_cigarSize); 
+        l_reg->p->capacity = sizeof(mm_extra_t)+l_cigarSize;
+        memcpy(l_reg->p->cigar, l_alignOutput->cigar, l_cigarSize);
 
         l_reg2 = l_alignOutput->region[1].orig;
-        l_reg2.p = NULL;
+        // l_reg2.p = NULL;
       }
       // Do alignment on CPU
       else {
-        assert( l_rg != 0 );
-        assert( l_resOff > 0 );
+        // assert( l_rg != 0 && l_resOff > 0 ); // this assertion should hold
         tl_encQseqPtr[0] = &(i_alignInputs[l_resOff-1].qseq[0][0]);
         tl_encQseqPtr[1] = &(i_alignInputs[l_resOff-1].qseq[1][0]);
         mm_align1(NULL,
@@ -217,7 +234,7 @@ bool unpackOutput(int const           i_fragIdx,
       if (l_rg > 0 && l_reg->split_inv) {
         tl_encQseqPtr[0] = &(l_alignInput->qseq[0][0]);
         tl_encQseqPtr[1] = &(l_alignInput->qseq[1][0]);
-  			if (mm_align1_inv(NULL,
+        if (mm_align1_inv(NULL,
                           g_mnmpOpt,
                           g_minimizer,
                           l_alignInput->qlen,
@@ -226,18 +243,18 @@ bool unpackOutput(int const           i_fragIdx,
                           l_reg,
                          &l_reg2,
                          &l_ez)               ) {
-  				io_regsOfSgmArr[l_sg] = mm_insert_reg(&l_reg2,
+          io_regsOfSgmArr[l_sg] = mm_insert_reg(&l_reg2,
                                                  l_rg,
                                                 &io_numRegsOfSgmArr[l_sg],
                                                  io_regsOfSgmArr[l_sg]);
-  				++l_rg; // skip the inserted INV alignment
-  			}
-  		}
+          ++l_rg; // skip the inserted INV alignment
+        }
+      }
     } // close loop over regions
 
     if (l_ez.cigar != NULL)
       kfree(NULL, l_ez.cigar);
-    assert( l_resOff > 0 || io_numRegsOfSgmArr[l_sg] == 0 );
+    // assert( l_resOff > 0 || io_numRegsOfSgmArr[l_sg] == 0 ); // this assertion should hold
     mm_filter_regs(g_mnmpOpt,
                    (io_numRegsOfSgmArr[l_sg] == 0) ? 0 : i_alignInputs[l_resOff-1].qlen,
                   &io_numRegsOfSgmArr[l_sg],
@@ -246,20 +263,20 @@ bool unpackOutput(int const           i_fragIdx,
 
     // Don't choose primary mapping(s)
     if (!(g_mnmpOpt->flag & MM_F_ALL_CHAINS)) {
-  		mm_set_parent(NULL,
+      mm_set_parent(NULL,
                     g_mnmpOpt->mask_level,
                     io_numRegsOfSgmArr[l_sg],
                     io_regsOfSgmArr[l_sg],
                     g_mnmpOpt->a * 2 + g_mnmpOpt->b,
                     g_mnmpOpt->flag&MM_F_HARD_MLEVEL);
-  		mm_select_sub(NULL,
+      mm_select_sub(NULL,
                     g_mnmpOpt->pri_ratio,
                     g_minimizer->k*2,
                     g_mnmpOpt->best_n,
                    &io_numRegsOfSgmArr[l_sg],
                     io_regsOfSgmArr[l_sg]);
-  		mm_set_sam_pri(io_numRegsOfSgmArr[l_sg], io_regsOfSgmArr[l_sg]);
-  	}
+      mm_set_sam_pri(io_numRegsOfSgmArr[l_sg], io_regsOfSgmArr[l_sg]);
+    }
 
     mm_set_mapq(NULL, io_numRegsOfSgmArr[l_sg], io_regsOfSgmArr[l_sg], g_mnmpOpt->min_chain_score, g_mnmpOpt->a, i_repLen, is_sr);
   } // close loop over segments
@@ -332,8 +349,8 @@ void MinimapAlignFpga::compute(int i_workerId) {
   long tl_totalNumFragsOnFPGA = 0;
   DLOG(INFO) << ALIGN_WORKER_MSG(i_workerId) << "Initialized FPGA worker for Alignment";
 
-  std::string l_btsm = "/curr/jyqiu/workspace/minimap2_release/mmsw_kernel_xilinx_vcu1525_dynamic_5_1_1211.xclbin";
 #ifndef LOCAL_BLAZE
+  std::string l_btsm = "/curr/jyqiu/workspace/minimap2_release/mmsw_kernel_xilinx_vcu1525_dynamic_5_1_1211.xclbin";
   mmsw_fpga_init(g_mnmpOpt, &l_btsm[0], g_minimizer);
   DLOG(INFO) << "Initialized FPGA";
 #else
@@ -400,8 +417,6 @@ void MinimapAlignFpga::compute(int i_workerId) {
       }
       int         const l_numSegs  = l_numSegsArr[l_fr];
       int         const l_segOff   = l_segOffArr[l_fr];
-      int         const l_repLen   = l_repLenArr[l_fr];
-      int         const l_fragGap  = l_fragGapArr[l_fr];
       mm_seg_t  * const l_segChains= l_segChainsArr[l_fr];
       int       *       l_numRegsOfSgmArr = &l_numRegsArr[l_segOff];
       mm_reg1_t **      l_regsOfSgmArr    = &l_regsArr[l_segOff];
@@ -441,8 +456,8 @@ void MinimapAlignFpga::compute(int i_workerId) {
       l_worker.getOutput(l_fpgaChunkOutput[l_bufferIdx]);
 #endif
 
-      // Switch buffer
-      l_bufferIdx = (l_bufferIdx+1)%3;
+      // Switch buffer: NO USE PING-PONG BUFFER IF UNCOMMENTED
+      // l_bufferIdx = (l_bufferIdx+1)%3;
 
       // Unpack output
       int l_resOff = 0;
@@ -455,10 +470,10 @@ void MinimapAlignFpga::compute(int i_workerId) {
         l_prevFragIdx = l_fr2;
 
         int         const l_numSegs2  = l_numSegsArr[l_fr2];
-        int         const l_segOff2   = l_segOffArr[l_fr2];
-        int         const l_repLen2   = l_repLenArr[l_fr2];
-        int         const l_fragGap2  = l_fragGapArr[l_fr2];
         mm_seg_t  * const l_segChains2= l_segChainsArr[l_fr2];
+        int         const l_segOff2   = l_segOffArr[l_fr2];
+        int         const l_repLen2   = l_repLenArr[l_segOff2];
+        int         const l_fragGap2  = l_fragGapArr[l_segOff2];
         int       *       l_numRegsOfSgmArr2 = &l_numRegsArr[l_segOff2];
         mm_reg1_t **      l_regsOfSgmArr2    = &l_regsArr[l_segOff2];
         align_input  * l_alignInputs = &l_fpgaChunkInput[(l_bufferIdx+2)%3][l_resOff];
@@ -483,12 +498,13 @@ void MinimapAlignFpga::compute(int i_workerId) {
       l_fpgaChunkInput[(l_bufferIdx+2)%3].clear();
       l_fpgaChunkOutput[(l_bufferIdx+2)%3].clear();
 
-      // // Switch buffer
-      // l_bufferIdx = (l_bufferIdx+1)%3;
+      // Switch buffer: USE PING-PONG BUFFER IF UNCOMMENTED
+      l_bufferIdx = (l_bufferIdx+1)%3;
+
       l_startPacking = 1;
     }
 
-    // Peeling: Invoke kernel if last input buffer is not empty
+    // Loop Peeling: Invoke kernel if last input buffer is not empty
     DLOG_IF(INFO, VLOG_IS_ON(3)) << ALIGN_WORKER_MSG(i_workerId) << "Call kernel for buffer " << l_bufferIdx;
     if (l_fpgaChunkInput[l_bufferIdx].size() > 0) {
       // Do alignment on FPGA for a inputs number large enough 
@@ -510,7 +526,7 @@ void MinimapAlignFpga::compute(int i_workerId) {
       }
     }
 
-    // Peeling: Unpack output for last two kernel launches
+    // Loop Peeling: Unpack output for last two kernel launches
     l_bufferIdx = (l_bufferIdx+2)%3;
     for (int l_k = 0; l_k < 2; l_k++, l_bufferIdx = (l_bufferIdx+1)%3) {
       if (l_fragIds[l_bufferIdx].size() > 0)
@@ -523,10 +539,10 @@ void MinimapAlignFpga::compute(int i_workerId) {
         l_prevFragIdx = l_fr2;
 
         int         const l_numSegs2  = l_numSegsArr[l_fr2];
-        int         const l_segOff2   = l_segOffArr[l_fr2];
-        int         const l_repLen2   = l_repLenArr[l_fr2];
-        int         const l_fragGap2  = l_fragGapArr[l_fr2];
         mm_seg_t  * const l_segChains2= l_segChainsArr[l_fr2];
+        int         const l_segOff2   = l_segOffArr[l_fr2];
+        int         const l_repLen2   = l_repLenArr[l_segOff2];
+        int         const l_fragGap2  = l_fragGapArr[l_segOff2];
         int       *       l_numRegsOfSgmArr2 = &l_numRegsArr[l_segOff2];
         mm_reg1_t **      l_regsOfSgmArr2    = &l_regsArr[l_segOff2];
         align_input  * l_alignInputs = &l_fpgaChunkInput[l_bufferIdx][l_resOff];
@@ -552,7 +568,7 @@ void MinimapAlignFpga::compute(int i_workerId) {
       l_fpgaChunkOutput[l_bufferIdx].clear();
     }
 
-    // Peeling: Do alignment on CPU for tailing unpacked fragments
+    // Loop Peeling: Do alignment on CPU for tailing unpacked fragments
     for (int l_fr3 = l_prevFragIdx+1; l_fr3 < i_chainsBatch.m_numFrag; l_fr3++)
       alignmentOnCpu(l_fr3, i_chainsBatch, i_chainsBatch.m_fragExtSOA);
 
@@ -560,76 +576,6 @@ void MinimapAlignFpga::compute(int i_workerId) {
 
     tl_totalNumFrags += i_chainsBatch.m_numFrag;
 
-#if 0
-    fragExtSOA *l_fragExtSOA = i_chainsBatch.m_fragExtSOA;
-    for (int l_fr = 0; l_fr < i_chainsBatch.m_numFrag; l_fr++) {
-      int l_segOff = i_chainsBatch.m_segOff[l_fr], pe_ori = g_mnmpOpt->pe_ori;
-      int qlens[MM_MAX_SEG];
-      const char *qseqs[MM_MAX_SEG];
-      for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {
-        qlens[l_sg] = i_chainsBatch.m_seqs[l_segOff + l_sg].l_seq;
-        qseqs[l_sg] = i_chainsBatch.m_seqs[l_segOff + l_sg].seq;
-      }
-
-      if (g_mnmpOpt->flag & MM_F_INDEPEND_SEG) {
-        for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {
-          int l_repLen = i_chainsBatch.m_repLen[l_segOff + l_sg];
-          int l_fragGap = i_chainsBatch.m_fragGap[l_segOff + l_sg];
-          fc_map_frag_align(g_mnmpOpt, g_minimizer, l_segOff+l_sg, 1, &qlens[l_sg], &qseqs[l_sg], &i_chainsBatch.m_numReg[l_segOff+l_sg], &i_chainsBatch.m_reg[l_segOff+l_sg], i_chainsBatch.m_seqs[l_segOff+l_sg].name, l_repLen, l_fragGap, l_fragExtSOA);
-        }
-      } else {
-        int l_repLen = i_chainsBatch.m_repLen[l_segOff];
-        int l_fragGap = i_chainsBatch.m_fragGap[l_segOff];
-
-        int  l_numSegs =  i_chainsBatch.m_numSeg[l_fr];
-        int *l_numRegs = &i_chainsBatch.m_numReg[l_segOff];
-        mm_reg1_t **regs = &i_chainsBatch.m_reg[l_segOff];
-        {
-          uint32_t l_hash = l_fragExtSOA->m_hash[l_fr];
-          mm_reg1_t *l_regs0Arr = l_fragExtSOA->m_regs0Arr[l_fr];
-          int l_numRegs0 = l_fragExtSOA->m_numRegs0[l_fr];
-          mm128_t *l_anchorArr = l_fragExtSOA->m_anchorArr[l_fr];
-
-          int is_sr = !!(g_mnmpOpt->flag & MM_F_SR);
-
-          if (l_numSegs == 1) { // uni-segment
-            l_regs0Arr = align_regs(g_mnmpOpt, g_minimizer, NULL, qlens[0], qseqs[0], &l_numRegs0, l_regs0Arr, l_anchorArr);
-            mm_set_mapq(NULL, l_numRegs0, l_regs0Arr, g_mnmpOpt->g_minimizern_chain_score, g_mnmpOpt->a, l_repLen, is_sr);
-            l_numRegs[0] = l_numRegs0, regs[0] = l_regs0Arr;
-          } else { // multi-segment
-            mm_seg_t *seg;
-            seg = mm_seg_gen(NULL, l_hash, l_numSegs, qlens, l_numRegs0, l_regs0Arr, l_numRegs, regs, l_anchorArr); // split fragment chain to separate segment chains        
-            free(l_regs0Arr);
-            for (int i = 0; i < l_numSegs; ++i) {
-              mm_set_parent(NULL, g_mnmpOpt->mask_level, l_numRegs[i], regs[i], g_mnmpOpt->a * 2 + g_mnmpOpt->b, g_mnmpOpt->flag&MM_F_HARD_MLEVEL); // update mm_reg1_t::parent 
-              regs[i] = align_regs(g_mnmpOpt, g_minimizer, NULL, qlens[i], qseqs[i], &l_numRegs[i], regs[i], seg[i].a);
-              mm_set_mapq(NULL, l_numRegs[i], regs[i], g_mnmpOpt->g_minimizern_chain_score, g_mnmpOpt->a, l_repLen, is_sr);
-            }           
-            mm_seg_free(NULL, l_numSegs, seg);
-            if (l_numSegs == 2 && g_mnmpOpt->pe_ori >= 0 && (g_mnmpOpt->flag&MM_F_CIGAR))
-              mm_pair(NULL, l_fragGap, g_mnmpOpt->pe_bonus, g_mnmpOpt->a * 2 + g_mnmpOpt->b, g_mnmpOpt->a, qlens, l_numRegs, regs); // pairing
-          }                   
-
-          kfree(NULL, l_anchorArr);
-        }
-      }
-
-      for (int l_sg = 0; l_sg < i_chainsBatch.m_numSeg[l_fr]; ++l_sg) {// flip the query strand and coordinate to the original read strand
-        if (i_chainsBatch.m_numSeg[l_fr] == 2 && ((l_sg == 0 && (pe_ori>>1&1)) || (l_sg == 1 && (pe_ori&1)))) {
-          int k, t;
-          mm_revcomp_bseq(&i_chainsBatch.m_seqs[l_segOff + l_sg]);
-          for (k = 0; k < i_chainsBatch.m_numReg[l_segOff + l_sg]; ++k) {
-            mm_reg1_t *r = &i_chainsBatch.m_reg[l_segOff + l_sg][k];
-            t = r->qs;
-            r->qs = qlens[l_sg] - r->qe;
-            r->qe = qlens[l_sg] - t;
-            r->rev = !r->rev;
-          }
-        }
-      }
-    }
-    deleteFragmentExtensionSOA(l_fragExtSOA);
-#endif
 
     AlignsBatch o_alignsBatch;
     o_alignsBatch.m_batchIdx    = i_chainsBatch.m_batchIdx;
@@ -654,7 +600,7 @@ void MinimapAlignFpga::compute(int i_workerId) {
 #ifndef LOCAL_BLAZE
   mmsw_fpga_destroy();
 #else
-  if (!l_fpgaOpt) 
+  if (!l_fpgaOpt)
     delete l_fpgaOpt;
   if (!l_fpgaIdx) 
     delete l_fpgaIdx;
