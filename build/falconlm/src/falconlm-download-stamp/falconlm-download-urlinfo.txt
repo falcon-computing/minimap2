@@ -1,0 +1,3 @@
+repository='external project URL'
+module='https://s3.amazonaws.com/fcs-build-public/falcon-lic-latest.tgz'
+tag=''

@@ -1,0 +1,3 @@
+repository='external project URL'
+module='https://s3.amazonaws.com/fcs-build-public/gflags.tar.gz'
+tag='MD5=1de8187489fbced5cc86c2ba241440e4'

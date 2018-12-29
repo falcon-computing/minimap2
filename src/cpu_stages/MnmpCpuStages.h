@@ -14,4 +14,7 @@
 #include "ReorderStage.h"
 #include "CoordSortStage.h"
 
+#include "MarkDupStage.h"
+#include "BucketSortStage.h"
+
 #endif

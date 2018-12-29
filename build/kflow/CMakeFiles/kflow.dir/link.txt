@@ -1,0 +1,2 @@
+/usr/bin/ar cr libkflow.a  CMakeFiles/kflow.dir/src/Common.cpp.o CMakeFiles/kflow.dir/src/Stage.cpp.o CMakeFiles/kflow.dir/src/Pipeline.cpp.o CMakeFiles/kflow.dir/src/MegaPipe.cpp.o
+/usr/bin/ranlib libkflow.a

@@ -166,6 +166,9 @@ int main(int argc, char *argv[]) {
   SeqsWrite        l_writeStg(l_numThreads, l_cmdStr.str());
 #endif
   SeqsWrite        l_writeStg(l_numThreads);
+  MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader);
+  BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_output_dir, 100,     l_numThreads); 
+
 
   int l_numStages = 6;
   kestrelFlow::Pipeline l_auxPipe(l_numStages, l_numThreads);
@@ -177,9 +180,11 @@ int main(int argc, char *argv[]) {
   l_auxPipe.addStage(l_stg++, &l_chainStg);
   l_auxPipe.addStage(l_stg++, &l_alignStg);
   l_auxPipe.addStage(l_stg++, &l_reordStg);
-  l_auxPipe.addStage(l_stg++, &l_sortStg);
-  l_auxPipe.addStage(l_stg++, &l_writeStg);
-  
+//  l_auxPipe.addStage(l_stg++, &l_sortStg);
+//  l_auxPipe.addStage(l_stg++, &l_writeStg);
+  l_auxPipe.addStage(l_stg++, &l_markdupStg);
+  l_auxPipe.addStage(l_stg++, &l_bucketsortStg);
+
   l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
 
