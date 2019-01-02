@@ -25,6 +25,8 @@ DECLARE_bool(bam);
 
 DECLARE_bool(use_numa);
 
+DECLARE_int32(num_bucket);
+
 int fc_set_opt(void);
 
 #endif
