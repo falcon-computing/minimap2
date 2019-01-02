@@ -1,3 +1,0 @@
-repository='external project URL'
-module='https://s3.amazonaws.com/fcs-build-public/googletest.tar.gz'
-tag='MD5=18fda945045354e264e3cca5428525d6'
