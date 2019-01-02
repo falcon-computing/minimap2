@@ -35,6 +35,23 @@ DEFINE_bool(sort, true,
                 "apply coordinate sort");
 DEFINE_bool(bam, false,
                 "output in BAM format");
+DEFINE_int32(extra_threads, 0,
+                "number of extra threads to be reduces");
+
+#ifdef BUILD_FPGA
+DEFINE_bool(use_fpga, true,
+                "enable fpga computation");
+DEFINE_bool(fpga_only, false,
+                "disable cpu for fpga-available stages");
+DEFINE_int32(fpga_threads, 1,
+                "number of FPGA threads");
+DEFINE_string(fpga_path, "",
+                "path to FPGA bitstream");
+#ifdef LOCAL_BLAZE
+DEFINE_string(blaze_conf, "",
+                "config file for Blaze");
+#endif
+#endif
 
 DEFINE_bool(use_numa, false,
                 "use NUMA lib for hardware locality");
