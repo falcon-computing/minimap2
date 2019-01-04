@@ -21,6 +21,10 @@ int BucketSortStage::get_bucket_id(bam1_t* read) {
   int32_t read_pos = read->core.pos;
 //DLOG(INFO) << "read_pos " << contig_id;
 //DLOG(INFO) << "contig_id " << contig_id;
+  // output alignments only on required chrs 
+  if (contig_id >= 24 ) {
+    return -1;
+  }
   int64_t acc_pos = accumulate_length_[contig_id] + read_pos;
 //DLOG(INFO) << "acc_pos " << acc_pos;
   return (acc_pos-1)/bucket_size_;
@@ -44,6 +48,9 @@ int BucketSortStage::compute(BamsBatch const & input) {
     for (int j = 0; j < buckets[i].size(); j++) {
       bam_destroy1(buckets[i][j]);
     }
+  }
+  for (int j = 0; j < buckets[-1].size(); j++) {
+    bam_destroy1(buckets[-1][j]);
   }
   free(input.m_bams);
 //  free(input.bam_buffer);

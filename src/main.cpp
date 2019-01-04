@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
 #endif
   SeqsWrite        l_writeStg(l_numThreads);
   MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader);
-  BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_output_dir, 2000,     l_numThreads); 
+  BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_output_dir, FLAGS_num_bucket, l_numThreads, FLAGS_compression_level); 
 
 
   int l_numStages = 6;

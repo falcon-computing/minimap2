@@ -41,7 +41,8 @@ DEFINE_bool(use_numa, false,
 
 DEFINE_int32(num_bucket, 100,
                 "the number of buckets used on bucket sort");
-
+DEFINE_int32(compression_level, -1,
+                "the compression level of bam output");
 int fc_set_opt() {
   mm_idxopt_init(g_mnmpIpt);
   mm_mapopt_init(g_mnmpOpt);

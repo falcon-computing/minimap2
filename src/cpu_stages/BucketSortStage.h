@@ -4,6 +4,8 @@
 #include <cstring>
 #include <string.h>
 #include <unordered_map>
+#include <iostream>
+#include <fstream>
 
 #include "kflow/Pipeline.h"
 #include "kflow/MapStage.h"
@@ -15,6 +17,7 @@
 #include "MnmpData.h"
 #include "MnmpCpuStages.h"
 #include "MnmpOptions.h"
+#include "htslib/sam.h"
 
 #include <boost/atomic.hpp>
 #include <boost/thread/mutex.hpp>
@@ -37,10 +40,10 @@ class bucketFile :
     }
 
     bucketFile(bam_hdr_t* head, int32_t id, const char* file_path,
-              const char* mode): head_(head), id_(id) {
+              const char* mode, const htsFormat* fmt): head_(head), id_(id) {
       file_path_ = strdup(file_path);
       mode_ = strdup(mode);
-      fout_ = sam_open(file_path_, mode_);
+      fout_ = sam_open_format(file_path_, mode_, fmt);
       writeFileHeader();
     }
     ~bucketFile() {
@@ -54,11 +57,18 @@ class bucketFile :
 class BucketSortStage :
   public kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0> {
   public:
-    BucketSortStage(bam_hdr_t* head, std::string out_dir, int num_buckets = 1, int n = 1):
-      kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0>(n), head_(head) {
+    BucketSortStage(bam_hdr_t* head, std::string out_dir, int num_buckets = 1, int n = 1, int l = -1):
+      kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0>(n), head_(head), cmp_l_(l) {
+        //initialize format
+        fmt_.category = sequence_data;
+        fmt_.format = bam;
+        fmt_.compression = bgzf;
+        fmt_.compression_level = cmp_l_;
         accumulate_length_.push_back(0);
         int64_t acc_len = 0;
         for (int i = 0; i < head_->n_targets; i++) {
+        //hard coding. only keep 1-22 and x y chrs.
+        //for (int i = 0; i < 24; i++) {
           acc_len += head_->target_len[i];
           accumulate_length_.push_back(acc_len);
         }
@@ -68,7 +78,7 @@ class BucketSortStage :
           std::stringstream ss; 
           ss << out_dir << "/part-" << std::setw(6) << std::setfill('0') << i << ".bam";
           const char *modes[] = {"wb", "wb0", "w"};
-          bucketFile* tmp_bucket = new bucketFile(head_, i, ss.str().c_str(), modes[FLAGS_output_flag]);
+          bucketFile* tmp_bucket = new bucketFile(head_, i, ss.str().c_str(), modes[FLAGS_output_flag], &fmt_);
           buckets_[i] = tmp_bucket;
         }
         bucket_size_ = accumulate_length_[head_->n_targets]/num_buckets;
@@ -78,7 +88,7 @@ class BucketSortStage :
         if (accumulate_length_[head_->n_targets]%num_buckets != 0) {
           bucket_size_ += 1;
         }
-        #if 0
+        //create interval files
         std::stringstream interval_file_path;
         interval_file_path << out_dir << "/intervals.list";
         std::ofstream interval_file(interval_file_path.str().c_str());
@@ -105,8 +115,6 @@ class BucketSortStage :
           contig_start_pos = end;
         }
         interval_file.close();
-        #endif
-//DLOG(INFO) << "id of bucket 2 " << buckets_[2]->get_id();
       }
     ~BucketSortStage() {
         for (auto it = buckets_.begin(); it != buckets_.end(); ++it) {
@@ -120,6 +128,8 @@ class BucketSortStage :
     int64_t bucket_size_;
     std::vector<int64_t> accumulate_length_;
     int get_bucket_id(bam1_t* read);
+    htsFormat fmt_;
+    int cmp_l_;
 };
 
 #endif
