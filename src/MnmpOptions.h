@@ -25,8 +25,17 @@ DECLARE_bool(bam);
 
 DECLARE_bool(use_numa);
 
-DECLARE_int32(num_bucket);
+DECLARE_bool(disable_markdup);
+DECLARE_int32(num_buckets);
 DECLARE_int32(compression_level);
+
+DECLARE_bool(disable_bucketsort);
+DECLARE_string(temp_dir);
+DECLARE_string(output);
+
+DECLARE_bool(disable_sort);
+DECLARE_bool(remove_duplicates);
+DECLARE_bool(filter_unmap);
 
 int fc_set_opt(void);
 

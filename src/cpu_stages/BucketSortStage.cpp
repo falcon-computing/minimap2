@@ -15,15 +15,24 @@
 
 #define UNMAP_FLAG 4
 #define MD_FLAG 1024
+#define MAP_IN_PAIR_FLAG 2
+#define NOT_PRIM_FLAG 256
+
+void BucketSortStage::closeFiles() {
+  for (auto it = buckets_.begin(); it != buckets_.end(); ++it) {
+    delete it->second;
+  }
+}
 
 int BucketSortStage::get_bucket_id(bam1_t* read) {
   int32_t contig_id = read->core.tid;
   int32_t read_pos = read->core.pos;
-//DLOG(INFO) << "read_pos " << contig_id;
-//DLOG(INFO) << "contig_id " << contig_id;
   // output alignments only on required chrs 
-  if (contig_id >= 24 ) {
-    return -1;
+  //if (contig_id >= 24 ) {
+  //  return -1;
+  //}
+  if (read->core.tid == -1) {
+    return num_buckets_;
   }
   int64_t acc_pos = accumulate_length_[contig_id] + read_pos;
 //DLOG(INFO) << "acc_pos " << acc_pos;
@@ -49,9 +58,6 @@ int BucketSortStage::compute(BamsBatch const & input) {
       bam_destroy1(buckets[i][j]);
     }
   }
-  for (int j = 0; j < buckets[-1].size(); j++) {
-    bam_destroy1(buckets[-1][j]);
-  }
   free(input.m_bams);
 //  free(input.bam_buffer);
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished BucketSort";
@@ -66,15 +72,13 @@ void bucketFile::writeFileHeader() {
   return;
 }
 
-#define MAP_IN_PAIR_FLAG 2
-#define NOT_PRIM_FLAG 256
 void bucketFile::writeFile(std::vector<bam1_t*> vec) {
   boost::lock_guard<bucketFile> guard(*this);
   for (int i = 0; i < vec.size(); i++) {
-    if (!(vec[i]->core.flag & UNMAP_FLAG)
-        && !(vec[i]->core.flag & MD_FLAG)
-        && (vec[i]->core.flag & MAP_IN_PAIR_FLAG)
-        && !(vec[i]->core.flag & NOT_PRIM_FLAG)
+    if (!(FLAGS_remove_duplicates && (vec[i]->core.flag & MD_FLAG))
+        //&& !(vec[i]->core.flag & UNMAP_FLAG)
+        //&& (vec[i]->core.flag & MAP_IN_PAIR_FLAG)
+        //&& !(vec[i]->core.flag & NOT_PRIM_FLAG)
        ) {
       sam_write1(fout_, head_, vec[i]);
     }

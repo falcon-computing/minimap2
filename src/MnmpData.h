@@ -8,6 +8,16 @@
 #include "minimap.h"
 #include "htslib/sam.h"
 
+#include "BamFileBuffer.h"
+
+//Data structure for sort-merge pipe
+struct BamRecord {
+  int id; 
+  int size;
+  bam1_t ** bams;
+
+  BamFileBuffer* fbuf;
+};
 
 struct fragExtSOA {
   mm_seg_t **m_segChainsArr;

@@ -43,7 +43,7 @@ class bucketFile :
               const char* mode, const htsFormat* fmt): head_(head), id_(id) {
       file_path_ = strdup(file_path);
       mode_ = strdup(mode);
-      fout_ = sam_open_format(file_path_, mode_, fmt);
+      fout_ = hts_open(file_path_, mode_);
       writeFileHeader();
     }
     ~bucketFile() {
@@ -58,7 +58,7 @@ class BucketSortStage :
   public kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0> {
   public:
     BucketSortStage(bam_hdr_t* head, std::string out_dir, int num_buckets = 1, int n = 1, int l = -1):
-      kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0>(n), head_(head), cmp_l_(l) {
+      kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0>(n), num_buckets_(num_buckets), head_(head), cmp_l_(l) {
         //initialize format
         fmt_.category = sequence_data;
         fmt_.format = bam;
@@ -72,14 +72,14 @@ class BucketSortStage :
           acc_len += head_->target_len[i];
           accumulate_length_.push_back(acc_len);
         }
-        for (int i = 0; i < num_buckets; i++) {
+        const char *modes[] = {"wb", "wb0", "w"};
+        // the last bucket is for unmapped reads
+        for (int i = 0; i <= num_buckets_; i++) {
           //boost::any var = this->getConst("sam_dir");
           //std::string out_dir = boost::any_cast<std::string>(var);
           std::stringstream ss; 
           ss << out_dir << "/part-" << std::setw(6) << std::setfill('0') << i << ".bam";
-          const char *modes[] = {"wb", "wb0", "w"};
-          bucketFile* tmp_bucket = new bucketFile(head_, i, ss.str().c_str(), modes[FLAGS_output_flag], &fmt_);
-          buckets_[i] = tmp_bucket;
+          buckets_[i] = new bucketFile(head_, i, ss.str().c_str(), modes[FLAGS_output_flag], &fmt_);
         }
         bucket_size_ = accumulate_length_[head_->n_targets]/num_buckets;
         if (bucket_size_ == 0) {
@@ -117,12 +117,11 @@ class BucketSortStage :
         interval_file.close();
       }
     ~BucketSortStage() {
-        for (auto it = buckets_.begin(); it != buckets_.end(); ++it) {
-          delete it->second;
-        }
     }
     int compute(BamsBatch const & input);
+    void closeFiles();
   private:
+    int num_buckets_;
     bam_hdr_t* head_;
     std::unordered_map<int32_t, bucketFile*> buckets_;
     int64_t bucket_size_;

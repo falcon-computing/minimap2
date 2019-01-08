@@ -17,6 +17,11 @@
 #define DUP_FLAG 1024
 #define NP_FLAG 256
 
+static bool bam1_lt(const bam1_t *a, const bam1_t *b) {
+  return ((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a))
+       < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b));
+}
+
 // static splitLine_t * bamToSplitLine(bam_hdr_t* head, bam1_t* bam_record) {
 //   splitLine* sline = getSplitLine();
 //   kstring_t ks = { 0, 0, NULL };
@@ -203,6 +208,10 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
   delete input.m_batches;
   l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBams*sizeof(bam1_t*));
   free(l_samStrBuf.s);
+
+  if (!FLAGS_disable_sort && FLAGS_disable_bucketsort) {
+    std::sort(l_bamsArr, l_bamsArr+l_numBams, bam1_lt);
+  }
 
   BamsBatch o_bamsBatch;
   o_bamsBatch.m_batchIdx = input.m_bundleIdx;

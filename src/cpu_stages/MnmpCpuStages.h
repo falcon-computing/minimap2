@@ -17,4 +17,9 @@
 #include "MarkDupStage.h"
 #include "BucketSortStage.h"
 
+#include "IndexGenStage.h"
+#include "BamReadStage.h"
+#include "BamSortStage.h"
+#include "BamWriteStage.h"
+
 #endif
