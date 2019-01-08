@@ -156,6 +156,12 @@ typedef struct {
 } mm_idx_reader_t;
 
 // memory buffer for thread-local storage during mapping
+/* Begin Falcon's Change */
+struct mm_tbuf_s {
+        void *km;
+        int rep_len, frag_gap;
+};
+/* End Falcon's Change */
 typedef struct mm_tbuf_s mm_tbuf_t;
 
 // global variables
@@ -326,6 +332,12 @@ void *mm_tbuf_get_km(mm_tbuf_t *b);
 mm_reg1_t *mm_map(const mm_idx_t *mi, int l_seq, const char *seq, int *n_regs, mm_tbuf_t *b, const mm_mapopt_t *opt, const char *name);
 
 void mm_map_frag(const mm_idx_t *mi, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, mm_tbuf_t *b, const mm_mapopt_t *opt, const char *qname);
+/* Begin Falcon's Change */
+void mm_map_frag_chain(const mm_idx_t *mi, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, mm_tbuf_t *b, const mm_mapopt_t *opt, const char *qname,
+                       uint64_t **u, uint64_t **mini_pos, uint32_t *hash,  mm_reg1_t **regs0, int *n_regs0, mm128_t **a, mm128_v *mv, int *qlen_sum);
+void mm_map_frag_align(const mm_idx_t *mi, int n_segs, const int *qlens, const char **seqs, int *n_regs, mm_reg1_t **regs, mm_tbuf_t *b, const mm_mapopt_t *opt, const char *qname,
+                       uint64_t *u, uint64_t *mini_pos, uint32_t hash,  mm_reg1_t *regs0, int n_regs0, mm128_t *a, mm128_v mv, int qlen_sum);
+/* End Falcon's Change */
 
 /**
  * Align a fasta/fastq file and print alignments to stdout

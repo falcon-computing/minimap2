@@ -328,7 +328,9 @@ int main(int argc, char *argv[])
 	}
 	if (opt.best_n == 0 && (opt.flag&MM_F_CIGAR) && mm_verbose >= 2)
 		fprintf(stderr, "[WARNING]\033[1;31m `-N 0' reduces alignment accuracy. Please use --secondary=no to suppress secondary alignments.\033[0m\n");
+        int l_loadofmi = 0;
 	while ((mi = mm_idx_reader_read(idx_rdr, n_threads)) != 0) {
+                l_loadofmi++;
 		if ((opt.flag & MM_F_CIGAR) && (mi->flag & MM_I_NO_SEQ)) {
 			fprintf(stderr, "[ERROR] the prebuilt index doesn't contain sequences.\n");
 			mm_idx_destroy(mi);
@@ -359,6 +361,7 @@ int main(int argc, char *argv[])
 	}
 	n_parts = idx_rdr->n_parts;
 	mm_idx_reader_close(idx_rdr);
+        fprintf(stderr, "load mi %d times\n", l_loadofmi);
 
 	if (opt.split_prefix)
 		mm_split_merge(argc - (o.ind + 1), (const char**)&argv[o.ind + 1], &opt, n_parts);
