@@ -33,7 +33,7 @@ DEFINE_bool(inorder_output, false,
                 "write all batches in order");
 DEFINE_bool(sort, true,
                 "(deprecated) apply coordinate sort");
-DEFINE_bool(bam, false,
+DEFINE_bool(bam, true,
                 "output in BAM format");
 
 DEFINE_bool(use_numa, false,
