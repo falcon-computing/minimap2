@@ -23,7 +23,7 @@ std::string fc_write_sam_hdr(const mm_idx_t *idx, const std::string rg, const st
       //mm_sprintf_lite(&str, "@SQ\tSN:%s\tLN:%d\n", idx->seq[i].name, idx->seq[i].len);
   }
   if (rg.length() > 0) {
-    l_hdrStr << rg;
+    l_hdrStr << rg << std::endl;
     //sam_write_rg_line(&str, rg);
   }
   l_hdrStr << "@PG\tID:minimap2\tPN:minimap2";
