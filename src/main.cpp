@@ -2,6 +2,9 @@
 #include <string>
 #include <vector>
 
+#include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
+
 #include <numa.h>
 
 #ifdef NDEBUG
@@ -67,6 +70,10 @@ int main(int argc, char *argv[]) {
   }
 
   int l_numThreads = FLAGS_t;
+
+  if (!boost::filesystem::create_directories(FLAGS_temp_dir)) {
+    DLOG(INFO) << "Can not create temp folder: " << FLAGS_temp_dir;
+  }
 
   // Start timer
   double l_startTime = realtime();
