@@ -439,7 +439,6 @@ void markDupsDiscordants(splitLine_t * block, state_t * state) {
         else if (isFirstRead(line))  first  = line;
         else if (isSecondRead(line)) second = line;
     }
-
     // Figure out what type of "pair" we have.
     bool orphan = false;
     bool dummyFirst = false;
@@ -500,7 +499,6 @@ void markDupsDiscordants(splitLine_t * block, state_t * state) {
             swapPtrs(&first, &second);
         }
     }
-
     // Now look for duplicates.
     if (!state->acceptDups) {
         // Calculate and store the second position and sequence name.
@@ -548,13 +546,11 @@ void markDupsDiscordants(splitLine_t * block, state_t * state) {
             }
         }
     }
-
     // If we have a dummy first, we can't have a discordant pair.
     if (dummyFirst) {
         disposeSplitLines(first);
         return;
     }
-
     // The first and second help us mark the discordants.
     // Both sides mapped, but pair not properly aligned.
     if (!orphan && isDiscordant(first)) {

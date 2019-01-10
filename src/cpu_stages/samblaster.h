@@ -10,6 +10,9 @@
 #include <map>
 #include "sbhash.h"
 
+//for testing
+#include "MnmpData.h"
+
 typedef uint64_t UINT64;
 typedef uint32_t UINT32;
 typedef int32_t   INT32;

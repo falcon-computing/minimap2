@@ -13,6 +13,8 @@
 #include "kflow/Pipeline.h"
 #include "kflow/SourceStage.h"
 #include "kflow/SinkStage.h"
+#include "samblaster.h"
+#include "sbhash.h"
 
 #define DUP_FLAG 1024
 #define NP_FLAG 256
@@ -22,21 +24,22 @@ static bool bam1_lt(const bam1_t *a, const bam1_t *b) {
        < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b));
 }
 
-// static splitLine_t * bamToSplitLine(bam_hdr_t* head, bam1_t* bam_record) {
-//   splitLine* sline = getSplitLine();
-//   kstring_t ks = { 0, 0, NULL };
-//   sam_format1(head, bam_record, &ks);
-//   sline->bufLen = ks.l;
-//   strcpy(sline->buffer, ks.s);
-//   free(ks.s);
-//   splitSplitLine(sline, 12);
-//   return sline;
-// }
+static splitLine_t * bamToSplitLine(bam_hdr_t* head, bam1_t* bam_record) {
+  splitLine* sline = getSplitLine();
+  kstring_t ks = { 0, 0, NULL };
+  sam_format1(head, bam_record, &ks);
+  sline->bufLen = ks.l;
+  strcpy(sline->buffer, ks.s);
+  free(ks.s);
+  splitSplitLine(sline, 12);
+  return sline;
+}
 
 static splitLine_t * kstringToSplitLine(kstring_t * ks) {
   splitLine* sline = getSplitLine();
   sline->bufLen = ks->l;
-  strcpy(sline->buffer, ks->s);
+  memcpy(sline->buffer, ks->s, ks->l*sizeof(char));
+
   splitSplitLine(sline, 12);
   return sline;
 }
@@ -135,50 +138,55 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
     for (int l_fr = 0; l_fr < l_alignsBatch.m_numFrag; l_fr++) {
       int l_segOffset = l_alignsBatch.m_segOff[l_fr];
       int l_numSegs   = l_alignsBatch.m_numSeg[l_fr];
-
+      
+      splitLine_t * splitLines = NULL;
+      splitLine_t * next_splitLine = NULL;
+      std::vector<bam1_t*> l_bams;
       int *l_numRegsArr = &l_alignsBatch.m_numReg[l_segOffset];
       mm_reg1_t const *const * l_regsArr = &l_alignsBatch.m_reg[l_segOffset];
-
       // Convert a fragment[pair] to bams
       int l_retCode;
       for (int l_sg = l_segOffset; l_sg < l_segOffset+l_numSegs; l_sg++) {
         mm_bseq1_t *l_seq = &l_alignsBatch.m_seqs[l_sg];
-
         if (l_alignsBatch.m_numReg[l_sg] > 0) { // the query has at least one hit
           for (int l_rg = 0; l_rg < l_alignsBatch.m_numReg[l_sg]; l_rg++) {
             mm_reg1_t *l_reg = &l_alignsBatch.m_reg[l_sg][l_rg];
             assert(!l_reg->sam_pri || l_reg->id == l_reg->parent);
             if ((g_mnmpOpt->flag & MM_F_NO_PRINT_2ND) && l_reg->id != l_reg->parent)
               continue;
-
-            mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, l_rg, l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
+            mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, l_rg, 
+                          l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
             if (l_numBams >= l_numBamsEst) {
               l_numBamsEst += (int)(0.2*l_numBamsEst);
               l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t*));
             }
             bam1_t *l_bam = bam_init1();
             l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
-            splitLine_t * splitLine = kstringToSplitLine(&l_samStrBuf);
-            if (l_bam->core.flag & NP_FLAG != 0 && checkSplitLineDup(splitLine)) {
-              markDupBam1t(l_bam);
+            next_splitLine = bamToSplitLine(l_bamHeader, l_bam);
+            if (splitLines == NULL) {
+              splitLines = next_splitLine;
             }
-            deleteSplitLine(splitLine);
+            else {
+              splitLine_t * tmp = splitLines;
+              while (tmp->next != NULL) {
+                tmp = tmp->next;
+              }
+              tmp->next = next_splitLine;
+            }
+            
+            l_bams.push_back(l_bam);
             l_bamsArr[l_numBams++] = l_bam;
           }
         }
         else if (g_mnmpOpt->flag & (MM_F_OUT_SAM|MM_F_PAF_NO_HIT)) { // output an empty hit, if requested
-          mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, -1, l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
+          mm_write_sam2(&l_samStrBuf, g_minimizer, l_seq, l_sg-l_segOffset, -1, 
+                        l_numSegs, l_numRegsArr, l_regsArr, NULL, g_mnmpOpt->flag);
           if (l_numBams >= l_numBamsEst) {
             l_numBamsEst += (int)(0.2*l_numBamsEst);
             l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBamsEst*sizeof(bam1_t*));
           }
           bam1_t *l_bam = bam_init1();
           l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
-          splitLine_t * splitLine = kstringToSplitLine(&l_samStrBuf);
-          if (l_bam->core.flag & NP_FLAG != 0 && checkSplitLineDup(splitLine)) {
-            markDupBam1t(l_bam);
-          }
-          deleteSplitLine(splitLine);
           l_bamsArr[l_numBams++] = l_bam;
         }
       }
@@ -198,8 +206,23 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
         if (l_curSeq->comment)
           free(l_curSeq->comment);
       }
+      if (splitLines != NULL) {
+        mtx_.lock();
+        markDupsDiscordants(splitLines, state_);
+        mtx_.unlock();
+        if (checkSplitLineDup(splitLines)) {
+          for (int ii = 0; ii < l_bams.size(); ii++) {
+            markDupBam1t(l_bams[ii]);
+          }
+        }
+      }
+      splitLine_t * tmp = splitLines;
+      while (tmp != NULL) {
+        splitLine_t * tmpp = tmp->next;
+        deleteSplitLine(tmp);
+        tmp = tmpp;
+      }
     } // close loop over fragments
-
     // Free a batch of alignment
     free(l_alignsBatch.m_reg);
     free(l_alignsBatch.m_numReg);
@@ -208,11 +231,9 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
   delete input.m_batches;
   l_bamsArr = (bam1_t**)realloc(l_bamsArr, l_numBams*sizeof(bam1_t*));
   free(l_samStrBuf.s);
-
   if (!FLAGS_disable_sort && FLAGS_disable_bucketsort) {
     std::sort(l_bamsArr, l_bamsArr+l_numBams, bam1_lt);
   }
-
   BamsBatch o_bamsBatch;
   o_bamsBatch.m_batchIdx = input.m_bundleIdx;
   o_bamsBatch.m_bams     = l_bamsArr;
