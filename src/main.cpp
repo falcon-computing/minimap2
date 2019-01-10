@@ -257,5 +257,9 @@ int main(int argc, char *argv[]) {
   free(g_mnmpOpt);
   free(g_mnmpIpt);
 
+  if (!FLAGS_disable_bucketsort) {
+    boost::filesystem::remove_all(FLAGS_temp_dir);
+  }
+
   return 0;
 }
