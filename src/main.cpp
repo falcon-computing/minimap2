@@ -151,6 +151,8 @@ int main(int argc, char *argv[]) {
 
   // Prepare header
   std::string l_headerStr = fc_write_sam_hdr(g_minimizer, FLAGS_R, VERSION, l_cmdStr.str());
+  kstring_t k_string_tmp = {0,0,0};
+  sam_write_rg_line(&k_string_tmp, FLAGS_R.c_str());
   g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
   g_bamHeader->l_text = l_headerStr.length();
   g_bamHeader->text = &l_headerStr[0];
@@ -173,7 +175,7 @@ int main(int argc, char *argv[]) {
   SeqsWrite        l_writeStg(l_numThreads, l_cmdStr.str());
 #endif
   SeqsWrite        l_writeStg(l_numThreads);
-  MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader);
+  MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader); 
   BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
 
 

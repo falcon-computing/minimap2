@@ -98,6 +98,8 @@ void mm_err_puts(const char *str);
 void mm_err_fwrite(const void *p, size_t size, size_t nitems, FILE *fp);
 void mm_err_fread(void *p, size_t size, size_t nitems, FILE *fp);
 
+void sam_write_rg_line(kstring_t *str, const char *s);
+
 #ifdef __cplusplus
 }
 #endif

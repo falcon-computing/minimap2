@@ -33,7 +33,6 @@ std::string fc_write_sam_hdr(const mm_idx_t *idx, const std::string rg, const st
       std::getline(ssi, token, 't');
     }
     l_hdrStr << std::endl;
-    //sam_write_rg_line(&str, rg);
   }
   l_hdrStr << "@PG\tID:minimap2\tPN:minimap2";
   //mm_sprintf_lite(&str, "@PG\tID:minimap2\tPN:minimap2");

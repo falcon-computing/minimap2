@@ -79,8 +79,9 @@ static char *mm_escape(char *s)
 	return s;
 }
 
-static void sam_write_rg_line(kstring_t *str, const char *s)
+void sam_write_rg_line(kstring_t *str, const char *s)
 {
+  printf("inside sam_write_rg_line\n");
 	char *p, *q, *r, *rg_line = 0;
 	memset(mm_rg_id, 0, 256);
 	if (s == 0) return;
