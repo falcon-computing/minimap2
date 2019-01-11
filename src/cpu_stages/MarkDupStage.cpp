@@ -18,6 +18,8 @@
 
 #define DUP_FLAG 1024
 #define NP_FLAG 256
+#define FIRST_IN_PAIR 64
+#define SECOND_IN_PAIR 128
 
 static bool bam1_lt(const bam1_t *a, const bam1_t *b) {
   return ((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a))
@@ -141,6 +143,8 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
       
       splitLine_t * splitLines = NULL;
       splitLine_t * next_splitLine = NULL;
+      int i1 = 0;
+      int i2 = 0;
       std::vector<bam1_t*> l_bams;
       int *l_numRegsArr = &l_alignsBatch.m_numReg[l_segOffset];
       mm_reg1_t const *const * l_regsArr = &l_alignsBatch.m_reg[l_segOffset];
@@ -162,6 +166,8 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
             }
             bam1_t *l_bam = bam_init1();
             l_retCode = sam_parse1(&l_samStrBuf, l_bamHeader, l_bam);
+            if (l_bam->core.flag & FIRST_IN_PAIR) i1 = 1;
+            if (l_bam->core.flag & SECOND_IN_PAIR) i2 = 1;
             next_splitLine = bamToSplitLine(l_bamHeader, l_bam);
             if (splitLines == NULL) {
               splitLines = next_splitLine;
@@ -206,7 +212,7 @@ BamsBatch MarkDupStage::compute(AlignsBundle const & input) {
         if (l_curSeq->comment)
           free(l_curSeq->comment);
       }
-      if (splitLines != NULL) {
+      if (splitLines != NULL && i1 == 1 && i2 == 1) {
         mtx_.lock();
         markDupsDiscordants(splitLines, state_);
         mtx_.unlock();
