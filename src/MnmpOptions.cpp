@@ -24,7 +24,7 @@ DEFINE_string(R, "",
 
 DEFINE_string(output_dir, "./",
                 "output directory for SAM/BAM files");
-DEFINE_int32(output_flag, -1,
+DEFINE_int32(output_flag, 1,
                 "Flag to specify output format: "
                 "0: BAM (compressed); 1: BAM (uncompressed); 2: SAM");
 DEFINE_int32(output_size, 128,
@@ -33,7 +33,7 @@ DEFINE_bool(inorder_output, false,
                 "write all batches in order");
 DEFINE_bool(sort, true,
                 "apply coordinate sort");
-DEFINE_bool(bam, false,
+DEFINE_bool(bam, true,
                 "output in BAM format");
 DEFINE_int32(extra_threads, 0,
                 "number of extra threads to be reduces");

@@ -25,7 +25,7 @@ int SeqsWrite::compute(BamsBatch const &i_bamsBatch) {
   samFile          *l_bamOutputFp;
 
   l_outputFname << FLAGS_output_dir << "/part-"
-                << std::setw(6) << std::setfill('0') << i_bamsBatch.m_batchIdx << ".log";
+                << std::setw(6) << std::setfill('0') << i_bamsBatch.m_batchIdx << ".bam";
   if (FLAGS_output_flag < 0 || FLAGS_output_flag > 2)
     FLAGS_output_flag = 1;
   l_bamOutputFp = sam_open(l_outputFname.str().c_str(), l_writeMode[FLAGS_output_flag]);

@@ -33,17 +33,19 @@ class MnmpSWBuffer {
       XCL_MEM_DDR_BANK0, XCL_MEM_DDR_BANK1,
       XCL_MEM_DDR_BANK2, XCL_MEM_DDR_BANK3};
 
-    cl_mem_ext_ptr_t input_ext;
+    cl_mem_ext_ptr_t input_ext[4];
 
-    input_ext.flags  = bankID[0];
-    input_ext.obj    = nullptr;
-    input_ext.param  = 0;
+    for (int i = 0; i < 4; i++) {
+      input_ext[i].flags  = bankID[i];
+      input_ext[i].obj    = nullptr;
+      input_ext[i].param  = 0;
+    }
 
     cl_int err = 0;
     cl_context context = env->getContext();
     buf = clCreateBuffer(context, 
         CL_MEM_READ_ONLY | CL_MEM_EXT_PTR_XILINX,
-        buffer_size, &input_ext, &err);
+        buffer_size, &input_ext[bank], &err);
 
     if (!buf || err != CL_SUCCESS)
       throw blaze::invalidParam("failed to allocate CL buffer");
@@ -91,9 +93,9 @@ class MnmpSW : public blaze::Task {
   static uint32_t     num_ref_seq_;
   static cl_mem       opt_buffer_;
   static cl_mem       ref_buffer_;
-  static cl_mem       mmi_buffer_;
+  static cl_mem       mmi_buffer_[4];
 
-  int                  cur_batch_size_;
+  int                 cur_batch_size_;
 #ifndef DUPLICATE_OUTPUT
   void                *out_data_;
 #endif

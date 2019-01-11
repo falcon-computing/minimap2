@@ -21,7 +21,7 @@ bool      MnmpSW::index_init_ = false;
 uint32_t  MnmpSW::num_ref_seq_ = 0;
 cl_mem    MnmpSW::opt_buffer_ = NULL;
 cl_mem    MnmpSW::ref_buffer_ = NULL;
-cl_mem    MnmpSW::mmi_buffer_ = NULL;
+cl_mem    MnmpSW::mmi_buffer_[4];
 
 
 MnmpSW::MnmpSW(): blaze::Task(NUM_INPUT_ARGS)//, timer_("MnmpSW Task")
@@ -54,10 +54,14 @@ void MnmpSW::setupIndex(uint32_t* opt_data, uint32_t num_ref_seq, uint64_t* ref_
 
   unsigned bankID[4] = {XCL_MEM_DDR_BANK0, XCL_MEM_DDR_BANK1, \
         XCL_MEM_DDR_BANK2, XCL_MEM_DDR_BANK3};
+
   cl_mem_ext_ptr_t bank_ext[4];
-  bank_ext[0].flags = bankID[0];
-  bank_ext[0].param = 0;
-  bank_ext[0].obj = nullptr;
+  for (int i = 0; i < 4; i++) {
+    bank_ext[i].flags = bankID[i];
+    bank_ext[i].param = 0;
+    bank_ext[i].obj = nullptr;
+  }
+
   cl_int err = 0;
   cl_int cl_status;
   cl_context context = env->getContext();
@@ -95,22 +99,20 @@ void MnmpSW::setupIndex(uint32_t* opt_data, uint32_t num_ref_seq, uint64_t* ref_
     }
   }
 
-  {
+  for (int i = 0; i < 4; i++) {
     //PLACE_TIMER1("init minimizer buffer");
-    mmi_buffer_ = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_EXT_PTR_XILINX,
-                      MAX_REF_SIZE, &bank_ext[0], &err);
-    if (!mmi_buffer_)
-        printf("failed to create mmi_buffer, err code is %d\n", err);
-    else 
-        printf("create mmi_buffer\n");
+    mmi_buffer_[i] = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_EXT_PTR_XILINX,
+                      MAX_REF_SIZE, &bank_ext[i], &err);
+    if (!mmi_buffer_[i]) {
+      throw std::runtime_error("failed to create mmi_buffer");
+    }
 
-    cl_status = clEnqueueWriteBuffer(command, mmi_buffer_, CL_TRUE,\
+    cl_status = clEnqueueWriteBuffer(command, mmi_buffer_[i], CL_TRUE,
                     0, MAX_REF_SIZE, mmi_data , 0, NULL, NULL);
     if (cl_status != CL_SUCCESS) {
-        printf("failed to write mmi buffer, err code is %d\n", err);
+      throw std::runtime_error("failed to write mmi_buffer");
     }
   }
-
 
   index_init_ = true;
   mtx_.unlock();
@@ -198,7 +200,6 @@ void MnmpSW::prepare() {
   }
 #endif
 
-  // write input buffer
   cl_int err = 0;
   cl_command_queue command = env->getCmdQueue();
 
@@ -206,11 +207,24 @@ void MnmpSW::prepare() {
     DLOG(ERROR) << "failed to get OpenCLEnv";
     throw blaze::invalidParam(__func__);
   }
+
+  // prepare input buffer, squeezing zeros
+  uint32_t* in  = (uint32_t*)malloc(sizeof(fpga_inputs));
+  int buffer_offset = 0;
+  int total_actual_data_size = 0;
+  align_input* inputs = in_data->data;
+  for (int i = 0; i < cur_batch_size_; i++) {
+    memcpy(in + buffer_offset, (uint32_t*)(&inputs[i]), inputs[i].data_size);
+    total_actual_data_size += inputs[i].data_size;
+    buffer_offset += inputs[i].data_size / 4;
+  }
+  
+  // write input buffer
   {
     //PLACE_TIMER1("write_buffer");
     cl_event event;
     cl_int err = clEnqueueWriteBuffer(command, input_->buf, CL_TRUE, 
-                  0, sizeof(align_input) * cur_batch_size_, (uint32_t*)in_data ,
+                  0, total_actual_data_size, in,
                   0, NULL, &event);
     if (err != CL_SUCCESS) {
       throw std::runtime_error("failed to write input buffer");
@@ -218,6 +232,7 @@ void MnmpSW::prepare() {
     clWaitForEvents(1, &event);
     clReleaseEvent(event);
   }
+  free(in);
 }
 
 void MnmpSW::compute() {
@@ -232,39 +247,47 @@ void MnmpSW::compute() {
   cl_command_queue command = env->getCmdQueue();
 
   int err = 0;
-  cl_event event;
-  err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &opt_buffer_);
-  err |= clSetKernelArg(kernel, 1, sizeof(uint32_t), &num_ref_seq_);
-  err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &ref_buffer_);
-  err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &mmi_buffer_);
-  err |= clSetKernelArg(kernel, 4, sizeof(cl_mem), &input_->buf);
+  int i_args = 0;
+  err |= clSetKernelArg(kernel, i_args++, sizeof(cl_mem), &opt_buffer_);
+  err |= clSetKernelArg(kernel, i_args++, sizeof(uint32_t), &num_ref_seq_);
+  err |= clSetKernelArg(kernel, i_args++, sizeof(cl_mem), &ref_buffer_);
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      err |= clSetKernelArg(kernel, i_args++, sizeof(cl_mem), &mmi_buffer_[i]);
+    }
+  }
+  err |= clSetKernelArg(kernel, i_args++, sizeof(cl_mem), &input_->buf);
 #ifdef DUPLICATE_OUTPUT
-  err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), (cl_mem*)output_->getData());
+  err |= clSetKernelArg(kernel, i_args++, sizeof(cl_mem), (cl_mem*)output_->getData());
 #else
-  err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), &output_->buf);
+  err |= clSetKernelArg(kernel, i_args++, sizeof(cl_mem), &output_->buf);
 #endif
-  err |= clSetKernelArg(kernel, 6, sizeof(int), &cur_batch_size_);
+  err |= clSetKernelArg(kernel, i_args++, sizeof(int), &cur_batch_size_);
 
   // uint64_t w_start = blaze::getUs();
 
   { //PLACE_TIMER1(kernel_name + " kernel");
+    cl_event event;
     cl_int err = clEnqueueTask(command, kernel, 0, NULL, &event);
     if (err != CL_SUCCESS) {
       throw std::runtime_error("failed to enqueue kernel");
+    }
+    clWaitForEvents(1, &event);
+    clReleaseEvent(event);
   }
-  clWaitForEvents(1, &event);
   
 #ifndef DUPLICATE_OUTPUT
-  cl_event event2;
   { //PLACE_TIMER1("read_buffer");
+    cl_event event;
     cl_int err = clEnqueueReadBuffer(command, output_->buf, CL_TRUE,
                   0, sizeof(align_output) * cur_batch_size_, (uint32_t*)out_data_,
-                  1, &event, &event2);
+                  1, &event, &event);
     if (err != CL_SUCCESS) {
       throw std::runtime_error("failed to read result buffer");
     }
+    clWaitForEvents(1, &event);
+    clReleaseEvent(event);
   }
-  clWaitForEvents(1, &event2);
 
   int ret = 1;
   output_token_->writeData(&ret, sizeof(int));
@@ -279,10 +302,4 @@ void MnmpSW::compute() {
 //   ksight::Interval<uint64_t> intv(start_ts, blaze::getUs());
 //   ksight::ksight.add("mmsw kernel", intv);
 // #endif
-
-  clReleaseEvent(event);
-#ifndef DUPLICATE_OUTPUT
-  clReleaseEvent(event2);
-#endif
-  }
 }
