@@ -2,6 +2,9 @@
 #include <string>
 #include <vector>
 
+#include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
+
 #include <numa.h>
 
 #ifdef NDEBUG
@@ -86,6 +89,10 @@ int main(int argc, char *argv[]) {
 
   int l_numThreads = FLAGS_t;
 
+  if (!boost::filesystem::create_directories(FLAGS_temp_dir)) {
+    DLOG(INFO) << "Can not create temp folder: " << FLAGS_temp_dir;
+  }
+
   // Start timer
   double l_startTime = realtime();
 
@@ -162,6 +169,8 @@ int main(int argc, char *argv[]) {
 
   // Prepare header
   std::string l_headerStr = fc_write_sam_hdr(g_minimizer, FLAGS_R, VERSION, l_cmdStr.str());
+  kstring_t k_string_tmp = {0,0,0};
+  sam_write_rg_line(&k_string_tmp, FLAGS_R.c_str());
   g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
   g_bamHeader->l_text = l_headerStr.length();
   g_bamHeader->text = &l_headerStr[0];
@@ -236,6 +245,9 @@ int main(int argc, char *argv[]) {
   Reorder          l_reordStg;
   CoordSort        l_sortStg(l_numThreads);
   SeqsWrite        l_writeStg(l_numThreads);
+  MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader); 
+  BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
+
 
 #ifdef BUILD_FPGA
   MinimapAlignFpga l_alignFpgaStg(FLAGS_fpga_threads);
@@ -257,8 +269,19 @@ int main(int argc, char *argv[]) {
     l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
 #endif
   l_auxPipe.addStage(l_stg++, &l_reordStg);
-  l_auxPipe.addStage(l_stg++, &l_sortStg);
-  l_auxPipe.addStage(l_stg++, &l_writeStg);
+  if (FLAGS_disable_markdup) {
+    l_auxPipe.addStage(l_stg++, &l_sortStg);
+  }
+  else {
+    l_auxPipe.addStage(l_stg++, &l_markdupStg);
+  }
+  if (FLAGS_disable_bucketsort) {
+    l_auxPipe.addStage(l_stg++, &l_writeStg);
+  }
+  else {
+    l_auxPipe.addStage(l_stg++, &l_bucketsortStg);
+  }
+  l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
 #ifdef BUILD_FPGA
   if (FLAGS_use_fpga && !FLAGS_fpga_only)
@@ -270,14 +293,50 @@ int main(int argc, char *argv[]) {
   // Run pipeline
   l_mnmpPipe.start();
   l_mnmpPipe.wait();
+  
+  l_bucketsortStg.closeFiles();
+  
+  // Stop timer
+  double l_endTime = realtime();
 
-  // Close index file 
+  // Finalize
+  std::cerr << "Version: falcon-minimap2 " << VERSION << std::endl;
+  std::cerr << "Real time: " << l_endTime - l_startTime << " sec, "
+            << "CPUD time: " << cputime() << " sec" << std::endl;
+
+  double sort_start_time = realtime();
+  
+  if (!FLAGS_disable_bucketsort) {
+    kestrelFlow::Pipeline sort_pipeline(4, FLAGS_t);
+    
+    IndexGenStage     indexgen_stage(
+        FLAGS_num_buckets + (!FLAGS_filter_unmap));
+    BamReadStage      bamread_stage(FLAGS_temp_dir, g_bamHeader, FLAGS_t);
+    BamSortStage      bamsort_stage(FLAGS_t);
+    BamWriteStage     bamwrite_stage(
+        FLAGS_num_buckets + (!FLAGS_filter_unmap),
+        FLAGS_temp_dir, FLAGS_output, g_bamHeader, FLAGS_t);
+
+    sort_pipeline.addStage(0, &indexgen_stage);
+    sort_pipeline.addStage(1, &bamread_stage);
+    sort_pipeline.addStage(2, &bamsort_stage);
+    sort_pipeline.addStage(3, &bamwrite_stage);
+    
+    kestrelFlow::MegaPipe mp(FLAGS_t, 0); 
+    mp.addPipeline(&sort_pipeline, 1); 
+  
+    mp.start();
+    mp.wait();
+    
+    std::cerr << "sort stage time: " 
+      << realtime() - sort_start_time
+      << " s" << std::endl;
+  }
+
+  // Close index file
   for (mm_idx_t *l_minimizer : g_minimizerNumaList)
     mm_idx_destroy(l_minimizer);
   mm_idx_reader_close(g_idxReader);
-
-  // Stop timer
-  double l_endTime = realtime();
 
   // Clean up
   g_bamHeader->text = NULL;
@@ -286,10 +345,9 @@ int main(int argc, char *argv[]) {
   free(g_mnmpOpt);
   free(g_mnmpIpt);
 
-  // Finalize
-  std::cerr << "Version: falcon-minimap2 " << VERSION << std::endl;
-  std::cerr << "Real time: " << l_endTime - l_startTime << " sec, "
-            << "CPUD time: " << cputime() << " sec" << std::endl;
+  if (!FLAGS_disable_bucketsort) {
+    boost::filesystem::remove_all(FLAGS_temp_dir);
+  }
 
 #ifdef BUILD_FPGA
 #ifdef LOCAL_BLAZE

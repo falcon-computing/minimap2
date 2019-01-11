@@ -23,7 +23,7 @@ DEFINE_string(R, "",
                 "-R arg in original minimap2, SAM read group line in a format like '@RG\\tID:foo\\tSM:bar'");
 
 DEFINE_string(output_dir, "./",
-                "output directory for SAM/BAM files");
+                "(deprecated) output directory for SAM/BAM files");
 DEFINE_int32(output_flag, -1,
                 "Flag to specify output format: "
                 "0: BAM (compressed); 1: BAM (uncompressed); 2: SAM");
@@ -32,8 +32,8 @@ DEFINE_int32(output_size, 128,
 DEFINE_bool(inorder_output, false,
                 "write all batches in order");
 DEFINE_bool(sort, true,
-                "apply coordinate sort");
-DEFINE_bool(bam, false,
+                "(deprecated) apply coordinate sort");
+DEFINE_bool(bam, true,
                 "output in BAM format");
 DEFINE_int32(extra_threads, 0,
                 "number of extra threads to be reduces");
@@ -55,6 +55,26 @@ DEFINE_string(blaze_conf, "",
 
 DEFINE_bool(use_numa, false,
                 "use NUMA lib for hardware locality");
+
+DEFINE_int32(num_buckets, 1024,
+                "the number of buckets used on bucket sort");
+DEFINE_int32(compression_level, -1,
+                "the compression level of bam output");
+
+DEFINE_bool(disable_bucketsort, false,
+            "disable bucketsort");
+DEFINE_string(temp_dir, "./temp",
+            "temp directory for bucket bams");
+DEFINE_string(output, ".",
+            "the output file path");
+DEFINE_bool(disable_sort, false,
+            "output unsorted bams");
+DEFINE_bool(remove_duplicates, false,
+            "remove duplicate reads from output");
+DEFINE_bool(filter_unmap, false,
+            "filter unmapped reads from output");
+DEFINE_bool(disable_markdup, false,
+            "disable markduplicate function");
 
 int fc_set_opt() {
   mm_idxopt_init(g_mnmpIpt);

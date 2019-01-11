@@ -24,7 +24,7 @@ int SeqsWrite::compute(BamsBatch const &i_bamsBatch) {
   std::stringstream l_outputFname;
   samFile          *l_bamOutputFp;
 
-  l_outputFname << FLAGS_output_dir << "/part-"
+  l_outputFname << FLAGS_temp_dir << "/part-"
                 << std::setw(6) << std::setfill('0') << i_bamsBatch.m_batchIdx << ".log";
   if (FLAGS_output_flag < 0 || FLAGS_output_flag > 2)
     FLAGS_output_flag = 1;
@@ -58,7 +58,7 @@ int SeqsWrite::compute(AlignsBatch const &i_alignsBatch) {
 
   // Output File
   std::stringstream l_outputFname;
-  l_outputFname << FLAGS_output_dir << "/part-"
+  l_outputFname << FLAGS_temp_dir << "/part-"
                 << std::setw(6) << std::setfill('0') << i_alignsBatch.m_batchIdx << ".log";
   std::ofstream l_outputFp;
   samFile      *l_bamOutputFp;

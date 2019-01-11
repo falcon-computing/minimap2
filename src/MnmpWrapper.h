@@ -8,8 +8,9 @@
 #include "minimap.h"
 #include "mmpriv.h"
 
+#include "MnmpGlobal.h"
+#include "MnmpOptions.h"
 #include "MnmpData.h"
-
 /* static export */
 extern "C" {
   /* map.c */

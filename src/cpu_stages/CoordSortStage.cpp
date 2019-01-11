@@ -109,7 +109,7 @@ BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
 
 
   // Sort
-  if (FLAGS_sort) {
+  if (!FLAGS_disable_sort && FLAGS_disable_bucketsort) {
     std::sort(l_bamsArr, l_bamsArr+l_numBams, bam1_lt);
   }
 

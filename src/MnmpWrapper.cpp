@@ -16,15 +16,23 @@ std::string fc_write_sam_hdr(const mm_idx_t *idx, const std::string rg, const st
 {
   //kstring_t str = {0,0,0};
   std::stringstream l_hdrStr;
-  l_hdrStr << "@HD\tVN:1.3\tSO:" << (FLAGS_sort ? "coordinate" : "unsorted") << std::endl;
+  l_hdrStr << "@HD\tVN:1.3\tSO:" << (!FLAGS_disable_sort ? "coordinate" : "unsorted") << std::endl;
   if (idx) {
     for (uint32_t i = 0; i < idx->n_seq; ++i)
       l_hdrStr << "@SQ\tSN:" << idx->seq[i].name << "\tLN:" << idx->seq[i].len << std::endl;
       //mm_sprintf_lite(&str, "@SQ\tSN:%s\tLN:%d\n", idx->seq[i].name, idx->seq[i].len);
   }
   if (rg.length() > 0) {
-    l_hdrStr << rg;
-    //sam_write_rg_line(&str, rg);
+    std::stringstream ssi(rg);
+    std::string token;
+    std::getline(ssi, token, '\\');
+    l_hdrStr << token;
+    std::getline(ssi, token, 't');
+    while(std::getline(ssi, token, '\\')) {
+      l_hdrStr << "\t" <<  token;
+      std::getline(ssi, token, 't');
+    }
+    l_hdrStr << std::endl;
   }
   l_hdrStr << "@PG\tID:minimap2\tPN:minimap2";
   //mm_sprintf_lite(&str, "@PG\tID:minimap2\tPN:minimap2");
