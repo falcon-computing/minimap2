@@ -89,6 +89,7 @@ int ksw_ll_i16(void *q, int tlen, const uint8_t *target, int gapo, int gape, int
 /************************************
  *** Private macros and functions ***
  ************************************/
+#ifndef __cplusplus
 
 #ifdef HAVE_KALLOC
 #include "kalloc.h"
@@ -174,4 +175,6 @@ static inline int ksw_apply_zdrop(ksw_extz_t *ez, int is_rot, int32_t H, int a, 
 	}
 	return 0;
 }
+#endif
+
 #endif

@@ -1,26 +1,35 @@
 ExternalProject_Add(glog-download
-    PREFIX "deps/glog"
+    PREFIX "glog"
     URL https://s3.amazonaws.com/fcs-build-public/glog-falcon.tar.gz
     URL_MD5 2b1bb4285ef4c8963d5e0e338f1952b8
-    SOURCE_DIR "${CMAKE_BINARY_DIR}/deps/glog/install"
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/glog/install"
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND "")
 
 ExternalProject_Add(gflags-download
-    PREFIX "deps/gflags"
+    PREFIX "gflags"
     URL https://s3.amazonaws.com/fcs-build-public/gflags.tar.gz
     URL_MD5 1de8187489fbced5cc86c2ba241440e4
-    SOURCE_DIR "${CMAKE_BINARY_DIR}/deps/gflags/install"
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/gflags/install"
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND "")
 
 ExternalProject_Add(googletest-download
-    PREFIX "deps/googletest"
+    PREFIX "googletest"
     URL https://s3.amazonaws.com/fcs-build-public/googletest.tar.gz
     URL_MD5 18fda945045354e264e3cca5428525d6
-    SOURCE_DIR "${CMAKE_BINARY_DIR}/deps/googletest/install"
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/googletest/install"
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND "")
+
+ExternalProject_Add(protobuf-download
+    PREFIX "protobuf"
+    URL https://s3.amazonaws.com/fcs-build-public/protobuf-2.5.0.tar.gz
+    URL_MD5 a68c7ee81a65a84e57287af2a0738a75
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/protobuf/install"
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND "")
@@ -29,34 +38,24 @@ add_custom_target(Google)
 add_dependencies(Google
     glog-download
     gflags-download
-    googletest-download)
-
-set(Glog_DIR          ${CMAKE_BINARY_DIR}/deps/glog/install)
-set(Glog_INCLUDE_DIRS ${Glog_DIR}/include)
-set(Glog_LIBRARY_DIRS ${Glog_DIR}/lib)
-set(Glog_LIBRARIES    glog)
-
-set(Gflags_DIR          ${CMAKE_BINARY_DIR}/deps/gflags/install)
-set(Gflags_INCLUDE_DIRS ${Gflags_DIR}/include)
-set(Gflags_LIBRARY_DIRS ${Gflags_DIR}/lib)
-set(Gflags_LIBRARIES    gflags)
-
-set(Gtest_DIR          ${CMAKE_BINARY_DIR}/deps/googletest/install)
-set(Gtest_INCLUDE_DIRS ${Gtest_DIR}/include)
-set(Gtest_LIBRARY_DIRS ${Gtest_DIR}/lib)
-set(Gtest_LIBRARIES    gtest)
+    googletest-download
+    protobuf-download)
 
 set(Google_INCLUDE_DIRS
-    ${Glog_INCLUDE_DIRS}
-    ${Gflags_INCLUDE_DIRS}
-    ${Gtest_INCLUDE_DIRS})
+    ${CMAKE_BINARY_DIR}/glog/install/include
+    ${CMAKE_BINARY_DIR}/gflags/install/include
+    ${CMAKE_BINARY_DIR}/googletest/install/include
+    ${CMAKE_BINARY_DIR}/gtest/install/include
+    ${CMAKE_BINARY_DIR}/protobuf/install/include)
 
 set(Google_LIBRARY_DIRS
-    ${Glog_LIBRARY_DIRS}
-    ${Gflags_LIBRARY_DIRS}
-    ${Gtest_LIBRARY_DIRS})
+    ${CMAKE_BINARY_DIR}/glog/install/lib
+    ${CMAKE_BINARY_DIR}/gflags/install/lib
+    ${CMAKE_BINARY_DIR}/googletest/install/lib
+    ${CMAKE_BINARY_DIR}/protobuf/install/lib)
 
 set(Google_LIBRARIES
-    ${Glog_LIBRARIES}
-    ${Gflags_LIBRARIES}
-    ${Gtest_LIBRARIES})
+    glog
+    gflags
+    protobuf
+    gtest)

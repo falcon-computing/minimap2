@@ -16,12 +16,31 @@
 #include "minimap.h"
 #include "mmpriv.h"
 #include "htslib/sam.h"
+
+#ifdef BUILD_FPGA
+#pragma message "Using FPGA for build"
+#ifdef LOCAL_BLAZE
+#pragma message "Using local Blaze for build"
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/text_format.h>
+#include "blaze/PlatformManager.h"
+#include "blaze/AppCommManager.h"
+#elif defined(USE_NATIVE)
+#pragma message "Using native FPGA routines for build"
+#else
+#pragma message "Using original C kernels for build"
+#endif
+#endif
+
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
 #include "MnmpOptions.h"
 #include "MnmpWrapper.h"
 #include "MnmpCpuStages.h"
+#ifdef BUILD_FPGA
+#include "MnmpFpgaStages.h"
+#endif
 
 mm_mapopt_t *g_mnmpOpt;
 mm_idxopt_t *g_mnmpIpt;
@@ -30,7 +49,6 @@ mm_idx_reader_t *g_idxReader;
 bam_hdr_t *g_bamHeader;
 
 std::vector<mm_idx_t*> g_minimizerNumaList;
-
 
 int main(int argc, char *argv[]) {
   // Store original arguments
@@ -156,28 +174,84 @@ int main(int argc, char *argv[]) {
   g_bamHeader = sam_hdr_parse(l_headerStr.length(), l_headerStr.c_str());
   g_bamHeader->l_text = l_headerStr.length();
   g_bamHeader->text = &l_headerStr[0];
-  // if ((g_mnmpOpt->flag & MM_F_OUT_SAM) &&
-  //     g_idxReader->n_parts == 1          ) {
-  //   // skip header
-  // }
 
   int    l_numSegs = argc - 2;
   char **l_fileName = &argv[2];
 
+  // Set up Fpga
+#ifdef BUILD_FPGA
+#ifdef LOCAL_BLAZE
+  // Start Blaze Infrastructure
+  blaze::ManagerConf l_blazeConf;
+  blaze::PlatformManager *l_blazePlatform = NULL;
+  blaze::AppCommManager  *l_blazeComm = NULL;
+
+  do {
+    if (!FLAGS_use_fpga)
+      break;
+    
+    int l_confFileHandle = open(FLAGS_blaze_conf.c_str(), O_RDONLY);
+    if (l_confFileHandle < 0) {
+      LOG(ERROR) << "Cannot find configure file for local blaze: " << FLAGS_blaze_conf;
+      LOG(WARNING) << "Not using FPGA acceleration for mmsw";
+      FLAGS_use_fpga = false;
+      break;
+    }
+    google::protobuf::io::FileInputStream l_confFile(l_confFileHandle);
+
+    // config manager
+    if (!google::protobuf::TextFormat::Parse(&l_confFile, &l_blazeConf)) {
+      LOG(ERROR) << "Cannot parse protobuf message";
+      LOG(WARNING) << "Not using FPGA acceleration for mmsw";
+      FLAGS_use_fpga = false;
+      break;
+    }
+    FLAGS_v = std::max(FLAGS_v, l_blazeConf.verbose());
+    // DLOG(INFO) << l_blazeConf.DebugString();
+  } while (0);
+  
+  // start manager
+  if (FLAGS_use_fpga) {
+    l_blazePlatform = new blaze::PlatformManager(&l_blazeConf);
+    l_blazeComm = new blaze::AppCommManager(l_blazePlatform, "127.0.0.1", 1027);
+
+    // Reduce one thread for Blaze manager
+    l_numThreads = std::max(l_numThreads-1, 1);
+  }
+#elif defined(USE_NATIVE)
+  // Only check bitstream file in native FPGA mode
+  if (FLAGS_use_fpga) {
+    boost::filesystem::wpath l_btsm(FLAGS_fpga_path);
+    if (FLAGS_use_fpga && !boost::filesystem::exists(l_btsm)) {
+      LOG(ERROR) << "Cannot find FPGA bitstream file: " << FLAGS_fpga_path;
+      LOG(WARNING) << "Not using FPGA acceleration";
+      FLAGS_use_fpga = false;
+    }
+  }
+#endif
+  if (!FLAGS_use_fpga && FLAGS_fpga_only) {
+    LOG(ERROR) << "Cannot enable CPU or FPGA for computation "
+               << "(CPU is disabled due to \"--fpga_only\" option)";
+    return -1;
+  }
+#endif
+
+  l_numThreads = std::max(l_numThreads-FLAGS_extra_threads, 1);
+
   // Construct execution pipeline
   SeqsRead         l_readStg(l_numSegs, l_fileName); 
-  MinimapOriginMap l_oriMapStg(l_numThreads);
   MinimapChain     l_chainStg(l_numThreads);
   MinimapAlign     l_alignStg(l_numThreads);
   Reorder          l_reordStg;
   CoordSort        l_sortStg(l_numThreads);
-#if 0
-  SeqsWrite        l_writeStg(l_numThreads, l_cmdStr.str());
-#endif
   SeqsWrite        l_writeStg(l_numThreads);
   MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader); 
   BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
 
+
+#ifdef BUILD_FPGA
+  MinimapAlignFpga l_alignFpgaStg(FLAGS_fpga_threads);
+#endif
 
   int l_numStages = 6;
   kestrelFlow::Pipeline l_auxPipe(l_numStages, l_numThreads);
@@ -185,9 +259,15 @@ int main(int argc, char *argv[]) {
 
   int l_stg = 0;
   l_auxPipe.addStage(l_stg++, &l_readStg);
-  //l_auxPipe.addStage(l_stg++, &l_oriMapStg);
   l_auxPipe.addStage(l_stg++, &l_chainStg);
+#ifndef BUILD_FPGA
   l_auxPipe.addStage(l_stg++, &l_alignStg);
+#else
+  if (!FLAGS_fpga_only)
+    l_auxPipe.addStage(l_stg++, &l_alignStg);
+  else
+    l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
+#endif
   l_auxPipe.addStage(l_stg++, &l_reordStg);
   if (FLAGS_disable_markdup) {
     l_auxPipe.addStage(l_stg++, &l_sortStg);
@@ -203,6 +283,12 @@ int main(int argc, char *argv[]) {
   }
   l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
+#ifdef BUILD_FPGA
+  if (FLAGS_use_fpga && !FLAGS_fpga_only)
+    l_auxPipe.addAccxBckStage(2, &l_alignFpgaStg);
+#endif
+
+  l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
   // Run pipeline
   l_mnmpPipe.start();
@@ -263,5 +349,13 @@ int main(int argc, char *argv[]) {
     boost::filesystem::remove_all(FLAGS_temp_dir);
   }
 
+#ifdef BUILD_FPGA
+#ifdef LOCAL_BLAZE
+  if (l_blazeComm != NULL)
+    delete l_blazeComm;
+  if (l_blazePlatform != NULL)
+    delete l_blazePlatform; 
+#endif
+#endif
   return 0;
 }
