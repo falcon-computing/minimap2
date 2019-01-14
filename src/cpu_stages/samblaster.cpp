@@ -9,6 +9,8 @@
 #include <map>
 #include "samblaster.h"
 
+#include "MnmpGlobal.h"
+
 int secondaryBits = 0x100;
 int complementaryBits = 0x800;
 splitLine_t* splitLineFreeList = NULL;

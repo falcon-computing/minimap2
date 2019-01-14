@@ -254,6 +254,9 @@ int main(int argc, char *argv[]) {
 #endif
 
   int l_numStages = 6;
+  if (!FLAGS_disable_bucketsort) {
+    l_numStages += 1;
+  }
   kestrelFlow::Pipeline l_auxPipe(l_numStages, l_numThreads);
   kestrelFlow::MegaPipe l_mnmpPipe(l_numThreads, 0);
 
@@ -269,10 +272,8 @@ int main(int argc, char *argv[]) {
     l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
 #endif
   l_auxPipe.addStage(l_stg++, &l_reordStg);
-  if (FLAGS_disable_markdup) {
-    l_auxPipe.addStage(l_stg++, &l_sortStg);
-  }
-  else {
+  l_auxPipe.addStage(l_stg++, &l_sortStg);
+  if (!FLAGS_disable_markdup) {
     l_auxPipe.addStage(l_stg++, &l_markdupStg);
   }
   if (FLAGS_disable_bucketsort) {
