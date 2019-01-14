@@ -1,4 +1,4 @@
-#include "MarkDupStage2.h"
+#include "MarkDupStage.h"
 #include <cstring>
 
 #define DUP_FLAG 1024
