@@ -11,7 +11,7 @@
 
 #include "MnmpData.h"
 #include "MnmpCpuStages.h"
-
+#include "MnmpUtils.h"
 
 class SeqsRead : public kestrelFlow::SourceStage<SeqsBatch, INPUT_DEPTH> {
  public:

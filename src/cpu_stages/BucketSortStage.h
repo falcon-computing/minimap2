@@ -104,8 +104,6 @@ class BucketSortStage :
             contig_start_pos = 0;
             contig_id += 1;
             if (contig_id >= head_->n_targets) {
-              DLOG(INFO) << "unexpected contig id exceeded.";
-              interval_file.close();
               break;
             }
           }

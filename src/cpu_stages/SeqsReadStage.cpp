@@ -21,7 +21,6 @@ void SeqsRead::compute() {
   int l_withQual = (!!(g_mnmpOpt->flag & MM_F_OUT_SAM) && !(g_mnmpOpt->flag & MM_F_NO_QUAL));
   int l_withComment = !!(g_mnmpOpt->flag & MM_F_COPY_COMMENT);
   int l_fragMode = (m_numFp > 1 || !!(g_mnmpOpt->flag & MM_F_FRAG_MODE));
-
   int l_numProcessed = 0;
 
   // Open files
