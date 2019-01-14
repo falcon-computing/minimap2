@@ -27,15 +27,10 @@ void BucketSortStage::closeFiles() {
 int BucketSortStage::get_bucket_id(bam1_t* read) {
   int32_t contig_id = read->core.tid;
   int32_t read_pos = read->core.pos;
-  // output alignments only on required chrs 
-  //if (contig_id >= 24 ) {
-  //  return -1;
-  //}
   if (read->core.tid == -1) {
     return num_buckets_;
   }
   int64_t acc_pos = accumulate_length_[contig_id] + read_pos;
-//DLOG(INFO) << "acc_pos " << acc_pos;
   return (acc_pos-1)/bucket_size_;
 }
 
@@ -59,7 +54,6 @@ int BucketSortStage::compute(BamsBatch const & input) {
     }
   }
   free(input.m_bams);
-//  free(input.bam_buffer);
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished BucketSort";
   return 0;
 }
