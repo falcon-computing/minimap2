@@ -89,12 +89,13 @@ class BucketSortStage :
           bucket_size_ += 1;
         }
         //create interval files
-        std::stringstream interval_file_path;
-        interval_file_path << out_dir << "/intervals.list";
-        std::ofstream interval_file(interval_file_path.str().c_str());
         int contig_start_pos = 0;
         int contig_id = 0;
         for (int i = 0; i < num_buckets && contig_id < head_->n_targets; i++) {
+          std::stringstream interval_file_path;
+          interval_file_path << out_dir << "/part-" << std::setw(6) 
+                             << std::setfill('0') << i << ".bed";
+          std::ofstream interval_file(interval_file_path.str().c_str());
           int end = contig_start_pos + bucket_size_;
           while (end > head_->target_len[contig_id]) {
             interval_file << contig_id << "\t" << contig_start_pos 
@@ -104,17 +105,19 @@ class BucketSortStage :
             contig_id += 1;
             if (contig_id >= head_->n_targets) {
               DLOG(INFO) << "unexpected contig id exceeded.";
+              interval_file.close();
               break;
             }
           }
           if (contig_id >= head_->n_targets) {
+            interval_file.close();
             break;
           }
           interval_file << contig_id << "\t" << contig_start_pos << "\t"
             << end << "\t" << i << "\n";
           contig_start_pos = end;
+          interval_file.close();
         }
-        interval_file.close();
       }
     ~BucketSortStage() {
     }
