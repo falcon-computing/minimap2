@@ -67,16 +67,12 @@ class BucketSortStage :
         accumulate_length_.push_back(0);
         int64_t acc_len = 0;
         for (int i = 0; i < head_->n_targets; i++) {
-        //hard coding. only keep 1-22 and x y chrs.
-        //for (int i = 0; i < 24; i++) {
           acc_len += head_->target_len[i];
           accumulate_length_.push_back(acc_len);
         }
         const char *modes[] = {"wb", "wb0", "w"};
         // the last bucket is for unmapped reads
         for (int i = 0; i <= num_buckets_; i++) {
-          //boost::any var = this->getConst("sam_dir");
-          //std::string out_dir = boost::any_cast<std::string>(var);
           std::stringstream ss; 
           ss << out_dir << "/part-" << std::setw(6) << std::setfill('0') << i << ".bam";
           buckets_[i] = new bucketFile(head_, i, ss.str().c_str(), modes[FLAGS_output_flag], &fmt_);
@@ -98,7 +94,7 @@ class BucketSortStage :
           std::ofstream interval_file(interval_file_path.str().c_str());
           int end = contig_start_pos + bucket_size_;
           while (end > head_->target_len[contig_id]) {
-            interval_file << contig_id << "\t" << contig_start_pos 
+            interval_file << head_->target_name[contig_id] << "\t" << contig_start_pos 
               << "\t" << head_->target_len[contig_id] << "\t" << i << "\n";
             end = end - head_->target_len[contig_id];
             contig_start_pos = 0;
@@ -111,7 +107,7 @@ class BucketSortStage :
             interval_file.close();
             break;
           }
-          interval_file << contig_id << "\t" << contig_start_pos << "\t"
+          interval_file << head_->target_name[contig_id] << "\t" << contig_start_pos << "\t"
             << end << "\t" << i << "\n";
           contig_start_pos = end;
           interval_file.close();
