@@ -13,7 +13,7 @@ DEFINE_bool(a, true,
                 "-a arg in original minimap2, output in SAM format");
 DEFINE_bool(sam, true,
                 "--sam arg in original minimap2, output in SAM format");
-DEFINE_int32(t, 1,
+DEFINE_int32(t, boost::thread::hardware_concurrency(),
                 "-t arg in original minimap2, number of threads");
 DEFINE_string(x, "sr",
                 "-x arg in original minimap2, preset");
