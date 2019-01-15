@@ -290,7 +290,6 @@ int main(int argc, char *argv[]) {
   else {
     l_auxPipe.addStage(l_stg++, &l_bucketsortStg);
   }
-  l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
 #ifdef BUILD_FPGA
   if (FLAGS_use_fpga && !FLAGS_fpga_only)
