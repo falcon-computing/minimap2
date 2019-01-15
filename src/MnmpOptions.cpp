@@ -39,7 +39,7 @@ DEFINE_int32(extra_threads, 0,
                 "number of extra threads to be reduces");
 
 #ifdef BUILD_FPGA
-DEFINE_bool(use_fpga, true,
+DEFINE_bool(use_fpga, false,
                 "enable fpga computation");
 DEFINE_bool(fpga_only, false,
                 "disable cpu for fpga-available stages");
