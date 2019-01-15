@@ -11,9 +11,9 @@ DEFINE_string(d, "",
 		"-d arg in original minimap2, dump index to file");
 DEFINE_bool(a, true,
                 "-a arg in original minimap2, output in SAM format");
-DEFINE_bool(sam, true,
+DEFINE_bool(sam, false,
                 "--sam arg in original minimap2, output in SAM format");
-DEFINE_int32(t, 1,
+DEFINE_int32(t, boost::thread::hardware_concurrency(),
                 "-t arg in original minimap2, number of threads");
 DEFINE_string(x, "sr",
                 "-x arg in original minimap2, preset");
@@ -53,7 +53,7 @@ DEFINE_string(blaze_conf, "",
 #endif
 #endif
 
-DEFINE_bool(use_numa, false,
+DEFINE_bool(use_numa, true,
                 "use NUMA lib for hardware locality");
 
 DEFINE_int32(num_buckets, 1024,
@@ -63,18 +63,27 @@ DEFINE_int32(compression_level, -1,
 
 DEFINE_bool(disable_bucketsort, false,
             "disable bucketsort");
+
 DEFINE_string(temp_dir, "./temp",
             "temp directory for bucket bams");
+
 DEFINE_string(output, ".",
             "the output file path");
+
 DEFINE_bool(disable_sort, false,
             "output unsorted bams");
+
 DEFINE_bool(remove_duplicates, false,
             "remove duplicate reads from output");
+
 DEFINE_bool(filter_unmap, false,
             "filter unmapped reads from output");
+
 DEFINE_bool(disable_markdup, false,
             "disable markduplicate function");
+
+DEFINE_bool(merge_bams, false,
+            "merge partial BAM files in the end");
 
 int fc_set_opt() {
   mm_idxopt_init(g_mnmpIpt);
