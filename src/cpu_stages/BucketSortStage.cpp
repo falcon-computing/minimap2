@@ -18,6 +18,76 @@
 #define MAP_IN_PAIR_FLAG 2
 #define NOT_PRIM_FLAG 256
 
+BucketSortStage::BucketSortStage(
+    bam_hdr_t* head, 
+    std::string out_dir, 
+    int num_buckets, 
+    int n, 
+    int l): kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0>(n), 
+  num_buckets_(num_buckets), 
+  head_(head)
+{
+  // initialize format
+  fmt_.category = sequence_data;
+  fmt_.format = bam;
+  fmt_.compression = bgzf;
+  fmt_.compression_level = l;
+
+  if (!head) {
+    throw std::runtime_error("misformat in bam header");
+  }
+
+  accumulate_length_.resize(head->n_targets+1);
+  accumulate_length_[0] = 0;
+  for (int i = 0; i < head_->n_targets; i++) {
+    accumulate_length_[i+1] = head_->target_len[i] + 
+      accumulate_length_[i];
+  }
+  int64_t total_length = accumulate_length_[head_->n_targets];
+  bucket_size_ = (total_length + num_buckets - 1) / num_buckets;
+
+  int contig_start_pos = 0;
+  int contig_id = 0;
+
+  const char *modes[] = {"wb", "wb0", "w"};
+  // the last bucket is for unmapped reads
+  for (int i = 0; i <= num_buckets_; i++) {
+    //boost::any var = this->getConst("sam_dir");
+    //std::string out_dir = boost::any_cast<std::string>(var);
+    std::stringstream ss; 
+    ss << out_dir << "/part-" << std::setw(6) << std::setfill('0') << i;
+    std::string bucket_fname = ss.str() + ".bam";
+    std::string intv_fname   = ss.str() + ".bed";
+    buckets_[i] = new bucketFile(head_, i, 
+        bucket_fname.c_str(), 
+        modes[FLAGS_output_flag], &fmt_);
+
+    if (i == num_buckets_) break;
+
+    // create interval files
+    std::ofstream intv_file(intv_fname.c_str());
+
+    int end = contig_start_pos + bucket_size_;
+    while (end > head_->target_len[contig_id]) {
+      intv_file << contig_id << "\t" 
+                << contig_start_pos << "\t" 
+                << head_->target_len[contig_id] << "\n";
+      end -= head_->target_len[contig_id];
+      contig_start_pos = 0;
+      contig_id ++;
+
+      if (contig_id == head_->n_targets) break;
+    }
+    if (contig_id < head_->n_targets) {
+      intv_file << contig_id << "\t" 
+                << contig_start_pos << "\t" 
+                << end << "\n";
+    }
+    contig_start_pos = end;
+    intv_file.close();
+  }
+}
+  
 void BucketSortStage::closeFiles() {
   for (auto it = buckets_.begin(); it != buckets_.end(); ++it) {
     delete it->second;
@@ -27,15 +97,10 @@ void BucketSortStage::closeFiles() {
 int BucketSortStage::get_bucket_id(bam1_t* read) {
   int32_t contig_id = read->core.tid;
   int32_t read_pos = read->core.pos;
-  // output alignments only on required chrs 
-  //if (contig_id >= 24 ) {
-  //  return -1;
-  //}
   if (read->core.tid == -1) {
     return num_buckets_;
   }
   int64_t acc_pos = accumulate_length_[contig_id] + read_pos;
-//DLOG(INFO) << "acc_pos " << acc_pos;
   return (acc_pos-1)/bucket_size_;
 }
 
@@ -59,7 +124,6 @@ int BucketSortStage::compute(BamsBatch const & input) {
     }
   }
   free(input.m_bams);
-//  free(input.bam_buffer);
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished BucketSort";
   return 0;
 }

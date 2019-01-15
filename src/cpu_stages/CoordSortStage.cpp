@@ -117,7 +117,6 @@ BamsBatch CoordSort::compute(AlignsBundle const &i_alignsBundle) {
   o_bamsBatch.m_batchIdx = i_alignsBundle.m_bundleIdx;
   o_bamsBatch.m_bams     = l_bamsArr;
   o_bamsBatch.m_numBams  = l_numBams;
-  
   DLOG_IF(INFO, VLOG_IS_ON(1)) << "Finished CoordSort";
 
   return o_bamsBatch;
