@@ -32,6 +32,7 @@
 #endif
 #endif
 
+#include "falcon-lic/genome.h"
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
@@ -68,6 +69,13 @@ int main(int argc, char *argv[]) {
 
   // Print arguments for records
   DLOG(INFO) << l_cmdStr.str();
+
+  int licret = 0;
+  if (0 != (licret = license_verify())) {
+    LOG(ERROR) << "Cannot authorize software usage: " << licret;
+    LOG(ERROR) << "Please contact support@falcon-computing.com for details.";
+    return -1;
+  }
 
   // Check arguments for input
   if (argc < 2) {
@@ -297,17 +305,21 @@ int main(int argc, char *argv[]) {
   
   l_bucketsortStg.closeFiles();
   
+  // Close index file
+  for (mm_idx_t *l_minimizer : g_minimizerNumaList)
+    mm_idx_destroy(l_minimizer);
+  mm_idx_reader_close(g_idxReader);
+
   // Stop timer
   double l_endTime = realtime();
 
   // Finalize
   std::cerr << "Version: falcon-minimap2 " << VERSION << std::endl;
-  std::cerr << "Real time: " << l_endTime - l_startTime << " sec, "
-            << "CPUD time: " << cputime() << " sec" << std::endl;
+  std::cerr << "minimap2 time: " << l_endTime - l_startTime << " sec" << std::endl;
 
   double sort_start_time = realtime();
   
-  if (!FLAGS_disable_bucketsort) {
+  if (FLAGS_merge_bams) {
     kestrelFlow::Pipeline sort_pipeline(4, FLAGS_t);
     
     IndexGenStage     indexgen_stage(
@@ -329,15 +341,13 @@ int main(int argc, char *argv[]) {
     mp.start();
     mp.wait();
     
-    std::cerr << "sort stage time: " 
+    std::cerr << "sort time: " 
       << realtime() - sort_start_time
-      << " s" << std::endl;
-  }
+      << " sec" << std::endl;
 
-  // Close index file
-  for (mm_idx_t *l_minimizer : g_minimizerNumaList)
-    mm_idx_destroy(l_minimizer);
-  mm_idx_reader_close(g_idxReader);
+  }
+  // this needs to be performed after BamWriteStage() dealloc
+  if (FLAGS_merge_bams) boost::filesystem::remove_all(FLAGS_temp_dir);
 
   // Clean up
   g_bamHeader->text = NULL;
@@ -345,10 +355,6 @@ int main(int argc, char *argv[]) {
   bam_hdr_destroy(g_bamHeader);
   free(g_mnmpOpt);
   free(g_mnmpIpt);
-
-  if (!FLAGS_disable_bucketsort) {
-    boost::filesystem::remove_all(FLAGS_temp_dir);
-  }
 
 #ifdef BUILD_FPGA
 #ifdef LOCAL_BLAZE

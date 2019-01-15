@@ -47,6 +47,7 @@ DECLARE_string(output);
 DECLARE_bool(disable_sort);
 DECLARE_bool(remove_duplicates);
 DECLARE_bool(filter_unmap);
+DECLARE_bool(merge_bams);
 
 int fc_set_opt(void);
 
