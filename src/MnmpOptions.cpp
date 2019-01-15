@@ -19,7 +19,8 @@ DEFINE_string(x, "sr",
                 "-x arg in original minimap2, preset");
 DEFINE_bool(frag, true,
                 "--frag arg in original minimap2, enable frag g_mnmpOptde");
-DEFINE_string(R, "",
+
+DEFINE_string(R, "@RG\\tID:sample\\tSM:sample\\tPL:illumina\\tLB:sample",
                 "-R arg in original minimap2, SAM read group line in a format like '@RG\\tID:foo\\tSM:bar'");
 
 DEFINE_string(output_dir, "./",
@@ -64,11 +65,10 @@ DEFINE_int32(compression_level, -1,
 DEFINE_bool(disable_bucketsort, false,
             "disable bucketsort");
 
-DEFINE_string(temp_dir, "./temp",
+DEFINE_string(temp_dir, "/tmp",
             "temp directory for bucket bams");
 
-DEFINE_string(output, ".",
-            "the output file path");
+DEFINE_string(output, "", "the output file path");
 
 DEFINE_bool(disable_sort, false,
             "output unsorted bams");
@@ -82,7 +82,7 @@ DEFINE_bool(filter_unmap, false,
 DEFINE_bool(disable_markdup, false,
             "disable markduplicate function");
 
-DEFINE_bool(merge_bams, false,
+DEFINE_bool(merge_bams, true,
             "merge partial BAM files in the end");
 
 int fc_set_opt() {

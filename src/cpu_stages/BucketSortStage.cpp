@@ -25,8 +25,7 @@ BucketSortStage::BucketSortStage(
     int n, 
     int l): kestrelFlow::MapStage<BamsBatch, int, COMPUTE_DEPTH, 0>(n), 
   num_buckets_(num_buckets), 
-  head_(head),
-  accumulate_length_(num_buckets+1)
+  head_(head)
 {
   // initialize format
   fmt_.category = sequence_data;
@@ -34,7 +33,11 @@ BucketSortStage::BucketSortStage(
   fmt_.compression = bgzf;
   fmt_.compression_level = l;
 
-  std::vector<int64_t> accumulate_length_(num_buckets+1);
+  if (!head) {
+    throw std::runtime_error("misformat in bam header");
+  }
+
+  accumulate_length_.resize(head->n_targets+1);
   accumulate_length_[0] = 0;
   for (int i = 0; i < head_->n_targets; i++) {
     accumulate_length_[i+1] = head_->target_len[i] + 

@@ -52,6 +52,9 @@ bam_hdr_t *g_bamHeader;
 std::vector<mm_idx_t*> g_minimizerNumaList;
 
 int main(int argc, char *argv[]) {
+  // Start timer
+  double l_startTime = realtime();
+
   // Store original arguments
   std::stringstream l_cmdStr;
   for (int i = 0; i < argc; i++) {
@@ -97,23 +100,20 @@ int main(int argc, char *argv[]) {
 
   int l_numThreads = FLAGS_t;
 
-  if (!boost::filesystem::create_directories(FLAGS_temp_dir)) {
+  if (!boost::filesystem::exists(FLAGS_temp_dir) && 
+      !boost::filesystem::create_directories(FLAGS_temp_dir)) {
     DLOG(INFO) << "Can not create temp folder: " << FLAGS_temp_dir;
   }
-
-  // Start timer
-  double l_startTime = realtime();
 
   // Open index file
   std::string l_indexFile(argv[1]);
   std::string l_indexDumpFile(FLAGS_d);
   g_idxReader = mm_idx_reader_open(l_indexFile.c_str(), g_mnmpIpt, FLAGS_d.c_str());
   if (g_idxReader == 0) {
-    mm_idx_reader_close(g_idxReader);
-    g_idxReader = NULL;
     LOG(ERROR) << "Failed to open file " << l_indexFile;
     return 1;
   }
+
   if (!g_idxReader->is_idx  &&
       l_indexDumpFile == "" &&
       argc - 1 < 2            ) {
@@ -131,15 +131,22 @@ int main(int argc, char *argv[]) {
   if (numa_available() != -1) {
     l_numNumaNodes = numa_num_configured_nodes();
   }
-  FLAGS_use_numa = (l_numNumaNodes > 1);
+  //FLAGS_use_numa = (l_numNumaNodes > 1);
   DLOG_IF(INFO, FLAGS_use_numa) << "Found " << l_numNumaNodes << " NUMA nodes";
+
+  // turn off numa if user specifies
+  if (!FLAGS_use_numa) {
+    l_numNumaNodes = 1;
+  }
 
   struct bitmask *l_nodeMask = numa_parse_nodestring("0");
   if (FLAGS_use_numa)
     numa_set_membind(l_nodeMask);
+
   numa_free_nodemask(l_nodeMask);
   DLOG_IF(INFO, FLAGS_use_numa) << "Loading index on NUMA node 0";
   g_minimizer = mm_idx_reader_read(g_idxReader, std::min(FLAGS_t, 3));
+
   if ((g_mnmpOpt->flag & MM_F_CIGAR)    &&
       (g_minimizer->flag & MM_I_NO_SEQ)   ) {
     mm_idx_destroy(g_minimizer);
@@ -253,9 +260,8 @@ int main(int argc, char *argv[]) {
   Reorder          l_reordStg;
   CoordSort        l_sortStg(l_numThreads);
   SeqsWrite        l_writeStg(l_numThreads);
-  MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader); 
-  BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
-
+  MarkDupStage     l_markdupStg(l_numThreads, g_bamHeader); 
+  BucketSortStage  l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
 
 #ifdef BUILD_FPGA
   MinimapAlignFpga l_alignFpgaStg(FLAGS_fpga_threads);
@@ -340,13 +346,14 @@ int main(int argc, char *argv[]) {
     mp.start();
     mp.wait();
     
+  }
+  // this needs to be performed after BamWriteStage() dealloc
+  if (FLAGS_merge_bams) {
+    boost::filesystem::remove_all(FLAGS_temp_dir);
     std::cerr << "sort time: " 
       << realtime() - sort_start_time
       << " sec" << std::endl;
-
   }
-  // this needs to be performed after BamWriteStage() dealloc
-  if (FLAGS_merge_bams) boost::filesystem::remove_all(FLAGS_temp_dir);
 
   // Clean up
   g_bamHeader->text = NULL;
