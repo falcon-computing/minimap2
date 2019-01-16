@@ -69,7 +69,7 @@ BucketSortStage::BucketSortStage(
 
     int end = contig_start_pos + bucket_size_;
     while (end > head_->target_len[contig_id]) {
-      intv_file << contig_id << "\t" 
+      intv_file << head_->target_name[contig_id] << "\t" 
                 << contig_start_pos << "\t" 
                 << head_->target_len[contig_id] << "\n";
       end -= head_->target_len[contig_id];
@@ -79,7 +79,7 @@ BucketSortStage::BucketSortStage(
       if (contig_id == head_->n_targets) break;
     }
     if (contig_id < head_->n_targets) {
-      intv_file << contig_id << "\t" 
+      intv_file << head_->target_name[contig_id] << "\t" 
                 << contig_start_pos << "\t" 
                 << end << "\n";
     }
