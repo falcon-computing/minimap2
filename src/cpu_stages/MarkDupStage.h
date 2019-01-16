@@ -1,5 +1,6 @@
-#ifndef MARKDUP
-#define MARKDUP
+#ifndef MARKDUP_H
+#define MARKDUP_H
+
 #include "kflow/Pipeline.h"
 #include "kflow/MapStage.h"
 #include "kflow/MapPartitionStage.h"
@@ -14,20 +15,22 @@
 
 // mapStage version
 class MarkDupStage: public kestrelFlow::MapStage<
-  AlignsBundle, BamsBatch, INPUT_DEPTH, OUTPUT_DEPTH> {
+  BamsBatch, BamsBatch, INPUT_DEPTH, OUTPUT_DEPTH> {
 public:
-  MarkDupStage(int n = 1, bam_hdr_t* head = NULL):kestrelFlow::MapStage<
-    AlignsBundle, BamsBatch, INPUT_DEPTH, OUTPUT_DEPTH>(n), head_(head){
-      InitializeState(head_);
+  MarkDupStage(int n = 1, bam_hdr_t * hdr = NULL):kestrelFlow::MapStage<
+    BamsBatch, BamsBatch, INPUT_DEPTH, OUTPUT_DEPTH>(n){
+      InitializeState(hdr);
+      hdr_ = hdr;
     }
   ~MarkDupStage() {
     // deleteState(state);
   } 
-  BamsBatch compute(AlignsBundle const & input);
+  BamsBatch compute(BamsBatch const & input);
 private:
-  void InitializeState(bam_hdr_t* head); 
-  state_t* state_;
-  bam_hdr_t* head_;
+  void InitializeState(bam_hdr_t* hdr); 
+  state_t* state;
+  bam_hdr_t* hdr_;
   boost::mutex mtx_;
 };
+
 #endif

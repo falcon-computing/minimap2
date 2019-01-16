@@ -32,6 +32,7 @@
 #endif
 #endif
 
+#include "falcon-lic/genome.h"
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
@@ -51,6 +52,9 @@ bam_hdr_t *g_bamHeader;
 std::vector<mm_idx_t*> g_minimizerNumaList;
 
 int main(int argc, char *argv[]) {
+  // Start timer
+  double l_startTime = realtime();
+
   // Store original arguments
   std::stringstream l_cmdStr;
   for (int i = 0; i < argc; i++) {
@@ -68,6 +72,13 @@ int main(int argc, char *argv[]) {
 
   // Print arguments for records
   DLOG(INFO) << l_cmdStr.str();
+
+  int licret = 0;
+  if (0 != (licret = license_verify())) {
+    LOG(ERROR) << "Cannot authorize software usage: " << licret;
+    LOG(ERROR) << "Please contact support@falcon-computing.com for details.";
+    return -1;
+  }
 
   // Check arguments for input
   if (argc < 2) {
@@ -89,23 +100,20 @@ int main(int argc, char *argv[]) {
 
   int l_numThreads = FLAGS_t;
 
-  if (!boost::filesystem::create_directories(FLAGS_temp_dir)) {
+  if (!boost::filesystem::exists(FLAGS_temp_dir) && 
+      !boost::filesystem::create_directories(FLAGS_temp_dir)) {
     DLOG(INFO) << "Can not create temp folder: " << FLAGS_temp_dir;
   }
-
-  // Start timer
-  double l_startTime = realtime();
 
   // Open index file
   std::string l_indexFile(argv[1]);
   std::string l_indexDumpFile(FLAGS_d);
   g_idxReader = mm_idx_reader_open(l_indexFile.c_str(), g_mnmpIpt, FLAGS_d.c_str());
   if (g_idxReader == 0) {
-    mm_idx_reader_close(g_idxReader);
-    g_idxReader = NULL;
     LOG(ERROR) << "Failed to open file " << l_indexFile;
     return 1;
   }
+
   if (!g_idxReader->is_idx  &&
       l_indexDumpFile == "" &&
       argc - 1 < 2            ) {
@@ -123,15 +131,22 @@ int main(int argc, char *argv[]) {
   if (numa_available() != -1) {
     l_numNumaNodes = numa_num_configured_nodes();
   }
-  FLAGS_use_numa = (l_numNumaNodes > 1);
+  //FLAGS_use_numa = (l_numNumaNodes > 1);
   DLOG_IF(INFO, FLAGS_use_numa) << "Found " << l_numNumaNodes << " NUMA nodes";
+
+  // turn off numa if user specifies
+  if (!FLAGS_use_numa) {
+    l_numNumaNodes = 1;
+  }
 
   struct bitmask *l_nodeMask = numa_parse_nodestring("0");
   if (FLAGS_use_numa)
     numa_set_membind(l_nodeMask);
+
   numa_free_nodemask(l_nodeMask);
   DLOG_IF(INFO, FLAGS_use_numa) << "Loading index on NUMA node 0";
   g_minimizer = mm_idx_reader_read(g_idxReader, std::min(FLAGS_t, 3));
+
   if ((g_mnmpOpt->flag & MM_F_CIGAR)    &&
       (g_minimizer->flag & MM_I_NO_SEQ)   ) {
     mm_idx_destroy(g_minimizer);
@@ -245,15 +260,17 @@ int main(int argc, char *argv[]) {
   Reorder          l_reordStg;
   CoordSort        l_sortStg(l_numThreads);
   SeqsWrite        l_writeStg(l_numThreads);
-  MarkDupStage      l_markdupStg(l_numThreads, g_bamHeader); 
-  BucketSortStage   l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
-
+  MarkDupStage     l_markdupStg(l_numThreads, g_bamHeader); 
+  BucketSortStage  l_bucketsortStg(g_bamHeader, FLAGS_temp_dir, FLAGS_num_buckets, l_numThreads, FLAGS_compression_level); 
 
 #ifdef BUILD_FPGA
   MinimapAlignFpga l_alignFpgaStg(FLAGS_fpga_threads);
 #endif
 
   int l_numStages = 6;
+  if (!FLAGS_disable_markdup) {
+    l_numStages += 1;
+  }
   kestrelFlow::Pipeline l_auxPipe(l_numStages, l_numThreads);
   kestrelFlow::MegaPipe l_mnmpPipe(l_numThreads, 0);
 
@@ -269,10 +286,8 @@ int main(int argc, char *argv[]) {
     l_auxPipe.addStage(l_stg++, &l_alignFpgaStg);
 #endif
   l_auxPipe.addStage(l_stg++, &l_reordStg);
-  if (FLAGS_disable_markdup) {
-    l_auxPipe.addStage(l_stg++, &l_sortStg);
-  }
-  else {
+  l_auxPipe.addStage(l_stg++, &l_sortStg);
+  if (!FLAGS_disable_markdup) {
     l_auxPipe.addStage(l_stg++, &l_markdupStg);
   }
   if (FLAGS_disable_bucketsort) {
@@ -281,7 +296,6 @@ int main(int argc, char *argv[]) {
   else {
     l_auxPipe.addStage(l_stg++, &l_bucketsortStg);
   }
-  l_mnmpPipe.addPipeline(&l_auxPipe, 1);
 
 #ifdef BUILD_FPGA
   if (FLAGS_use_fpga && !FLAGS_fpga_only)
@@ -296,17 +310,21 @@ int main(int argc, char *argv[]) {
   
   l_bucketsortStg.closeFiles();
   
+  // Close index file
+  for (mm_idx_t *l_minimizer : g_minimizerNumaList)
+    mm_idx_destroy(l_minimizer);
+  mm_idx_reader_close(g_idxReader);
+
   // Stop timer
   double l_endTime = realtime();
 
   // Finalize
   std::cerr << "Version: falcon-minimap2 " << VERSION << std::endl;
-  std::cerr << "Real time: " << l_endTime - l_startTime << " sec, "
-            << "CPUD time: " << cputime() << " sec" << std::endl;
+  std::cerr << "minimap2 time: " << l_endTime - l_startTime << " sec" << std::endl;
 
   double sort_start_time = realtime();
   
-  if (!FLAGS_disable_bucketsort) {
+  if (FLAGS_merge_bams) {
     kestrelFlow::Pipeline sort_pipeline(4, FLAGS_t);
     
     IndexGenStage     indexgen_stage(
@@ -328,15 +346,14 @@ int main(int argc, char *argv[]) {
     mp.start();
     mp.wait();
     
-    std::cerr << "sort stage time: " 
-      << realtime() - sort_start_time
-      << " s" << std::endl;
   }
-
-  // Close index file
-  for (mm_idx_t *l_minimizer : g_minimizerNumaList)
-    mm_idx_destroy(l_minimizer);
-  mm_idx_reader_close(g_idxReader);
+  // this needs to be performed after BamWriteStage() dealloc
+  if (FLAGS_merge_bams) {
+    boost::filesystem::remove_all(FLAGS_temp_dir);
+    std::cerr << "sort time: " 
+      << realtime() - sort_start_time
+      << " sec" << std::endl;
+  }
 
   // Clean up
   g_bamHeader->text = NULL;
@@ -344,10 +361,6 @@ int main(int argc, char *argv[]) {
   bam_hdr_destroy(g_bamHeader);
   free(g_mnmpOpt);
   free(g_mnmpIpt);
-
-  if (!FLAGS_disable_bucketsort) {
-    boost::filesystem::remove_all(FLAGS_temp_dir);
-  }
 
 #ifdef BUILD_FPGA
 #ifdef LOCAL_BLAZE
