@@ -254,7 +254,9 @@ int main(int argc, char *argv[]) {
   l_numThreads = std::max(l_numThreads-FLAGS_extra_threads, 1);
 
   // Construct execution pipeline
-  SeqsRead         l_readStg(l_numSegs, l_fileName); 
+  //SeqsRead         l_readStg(l_numSegs, l_fileName); 
+  KseqsRead        l_kseqsreadStg(l_numSegs, l_fileName);
+  KseqsToBseqs     l_kseqs2bseqsStg(l_numSegs, l_numThreads);
   MinimapChain     l_chainStg(l_numThreads);
   MinimapAlign     l_alignStg(l_numThreads);
   Reorder          l_reordStg;
@@ -267,7 +269,7 @@ int main(int argc, char *argv[]) {
   MinimapAlignFpga l_alignFpgaStg(FLAGS_fpga_threads);
 #endif
 
-  int l_numStages = 6;
+  int l_numStages = 7;
   if (!FLAGS_disable_markdup) {
     l_numStages += 1;
   }
@@ -275,7 +277,9 @@ int main(int argc, char *argv[]) {
   kestrelFlow::MegaPipe l_mnmpPipe(l_numThreads, 0);
 
   int l_stg = 0;
-  l_auxPipe.addStage(l_stg++, &l_readStg);
+  //l_auxPipe.addStage(l_stg++, &l_readStg);
+  l_auxPipe.addStage(l_stg++, &l_kseqsreadStg);
+  l_auxPipe.addStage(l_stg++, &l_kseqs2bseqsStg);
   l_auxPipe.addStage(l_stg++, &l_chainStg);
 #ifndef BUILD_FPGA
   l_auxPipe.addStage(l_stg++, &l_alignStg);

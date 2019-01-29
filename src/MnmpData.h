@@ -3,12 +3,24 @@
 
 #include <string>
 #include <vector>
+#include "kseq.h"
 #include "bseq.h"
 #include "mmpriv.h"
 #include "minimap.h"
 #include "htslib/sam.h"
 
 #include "BamFileBuffer.h"
+
+KSEQ_INIT2(static , gzFile, gzread)
+
+//Data structure for kseqsRead and bseqsRead
+struct KseqsBatch
+{
+  int m_startSeqIdx;
+  int m_batchIdx;
+  int m_numSeq;
+  kseq_t ** kseqs;
+};
 
 //Data structure for sort-merge pipe
 struct BamRecord {
