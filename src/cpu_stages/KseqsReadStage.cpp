@@ -45,6 +45,12 @@ void KseqsRead::compute() {
   // a buffer kseq for mm_bseq_read3
   kseq_t * tmp_kseq = NULL;
 
+  // kstream_t for all kseqs
+  kstream_t ** kss = (kstream_t**)malloc(m_numFp*sizeof(kstream_t*));
+  for (int i = 0; i < m_numFp; i++) {
+    kss[i] = ks_init(l_fp[i]->fp);
+  }
+
   while (true) {
     DLOG_IF(INFO, VLOG_IS_ON(1)) << "Started KseqsRead";
     KseqsBatch o_kseqsBatch;
@@ -61,7 +67,8 @@ void KseqsRead::compute() {
       while(1) {
         int n_read = 0;
         for (int i = 0; i < m_numFp; i++) {
-          kseq_t * tmp = kseq_init(l_fp[i]->fp);
+          kseq_t * tmp = (kseq_t*)calloc(1, sizeof(kseq_t));
+          tmp->f = kss[i];
           if (kseq_read(tmp) >= 0) {
             n_read++;
             if (kseqs_i >= kseqs_size) {
@@ -93,7 +100,8 @@ void KseqsRead::compute() {
         tmp_kseq = NULL;
       }
       while (1) {
-        kseq_t * tmp = kseq_init(l_fp[0]->fp);
+        kseq_t * tmp = (kseq_t*)calloc(1, sizeof(kseq_t));
+        tmp->f = kss[0];
         if (kseq_read(tmp) < 0) {
           break;
         }

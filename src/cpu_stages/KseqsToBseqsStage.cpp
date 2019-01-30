@@ -46,14 +46,23 @@ SeqsBatch KseqsToBseqs::compute(KseqsBatch const &i_kseqsBatch) {
   int l_withQual = (!!(g_mnmpOpt->flag & MM_F_OUT_SAM) && !(g_mnmpOpt->flag & MM_F_NO_QUAL));
   int l_withComment = !!(g_mnmpOpt->flag & MM_F_COPY_COMMENT);
   int l_fragMode = (m_numFp > 1 || !!(g_mnmpOpt->flag & MM_F_FRAG_MODE));
-  
+
   SeqsBatch o_seqsBatch;
   mm_bseq1_t * m_seqs = (mm_bseq1_t *)malloc(i_kseqsBatch.m_numSeq * sizeof(mm_bseq1_t));
   o_seqsBatch.m_seqs = m_seqs;
 
   for (int i = 0; i < i_kseqsBatch.m_numSeq; i ++) {
     kseq2bseq(i_kseqsBatch.kseqs[i], m_seqs + i, l_withQual, l_withComment);
-    kseq_destroy(i_kseqsBatch.kseqs[i]);
+    free(i_kseqsBatch.kseqs[i]->name.s);
+    free(i_kseqsBatch.kseqs[i]->comment.s);
+    free(i_kseqsBatch.kseqs[i]->seq.s);
+    free(i_kseqsBatch.kseqs[i]->qual.s);
+  }
+  if (i_kseqsBatch.m_numSeq > 0) {
+    ks_destroy(i_kseqsBatch.kseqs[0]->f);
+  }
+  for (int i = 0; i < i_kseqsBatch.m_numSeq; i++) {
+    free(i_kseqsBatch.kseqs[i]);
   }
   free(i_kseqsBatch.kseqs);
 
