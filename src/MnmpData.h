@@ -3,11 +3,11 @@
 
 #include <string>
 #include <vector>
-#include "kseq.h"
 #include "bseq.h"
 #include "mmpriv.h"
 #include "minimap.h"
 #include "htslib/sam.h"
+#include "kseq.h"
 
 #include "BamFileBuffer.h"
 
