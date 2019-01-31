@@ -86,7 +86,7 @@ void KseqsRead::compute() {
           }
           break;
         }
-        DLOG_IF(INFO, VLOG_IS_ON(2)) << "size " << size << " g_mnmpOpt->mini_batch_size " << g_mnmpOpt->mini_batch_size;
+        DLOG_IF(INFO, VLOG_IS_ON(4)) << "size " << size << " g_mnmpOpt->mini_batch_size " << g_mnmpOpt->mini_batch_size;
         if (size >= g_mnmpOpt->mini_batch_size) {
           break;
         }
@@ -156,6 +156,7 @@ void KseqsRead::compute() {
   }
 
   for (int f_i = 0; f_i < m_numFp; f_i++) {
+    ks_destroy(kss[f_i]);
     mm_bseq_close(l_fp[f_i]);
   }
   free(l_fp);

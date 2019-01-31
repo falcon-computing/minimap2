@@ -58,9 +58,6 @@ SeqsBatch KseqsToBseqs::compute(KseqsBatch const &i_kseqsBatch) {
     free(i_kseqsBatch.kseqs[i]->seq.s);
     free(i_kseqsBatch.kseqs[i]->qual.s);
   }
-  if (i_kseqsBatch.m_numSeq > 0) {
-    ks_destroy(i_kseqsBatch.kseqs[0]->f);
-  }
   for (int i = 0; i < i_kseqsBatch.m_numSeq; i++) {
     free(i_kseqsBatch.kseqs[i]);
   }
