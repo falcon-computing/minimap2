@@ -1,5 +1,7 @@
 #include "MnmpData.h"
 
+kestrelFlow::Queue<kseq_buf, INPUT_DEPTH + 1> kseq_queue;
+
 fragExtSOA *createFragmentExtensionSOA(int i_numFrag) {
   fragExtSOA *o_fragExtSOA = new fragExtSOA;
   o_fragExtSOA->m_segChainsArr = new mm_seg_t*[i_numFrag];

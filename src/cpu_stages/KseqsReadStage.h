@@ -14,11 +14,9 @@
 
 class KseqsRead : public kestrelFlow::SourceStage<KseqsBatch, INPUT_DEPTH> {
  public:
-  KseqsRead(int i_numFp, char **i_fn) : kestrelFlow::SourceStage<KseqsBatch, INPUT_DEPTH>(),
-                                       m_numFp(i_numFp),
-                                       m_fn(i_fn)
-  {;}
+  KseqsRead(int i_numFp, char **i_fn);
   void compute();
+  ~KseqsRead();
  private:
   int  m_numFp;
   char **m_fn;

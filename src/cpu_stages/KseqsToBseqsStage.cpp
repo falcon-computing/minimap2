@@ -52,16 +52,10 @@ SeqsBatch KseqsToBseqs::compute(KseqsBatch const &i_kseqsBatch) {
   o_seqsBatch.m_seqs = m_seqs;
 
   for (int i = 0; i < i_kseqsBatch.m_numSeq; i ++) {
-    kseq2bseq(i_kseqsBatch.kseqs[i], m_seqs + i, l_withQual, l_withComment);
-    free(i_kseqsBatch.kseqs[i]->name.s);
-    free(i_kseqsBatch.kseqs[i]->comment.s);
-    free(i_kseqsBatch.kseqs[i]->seq.s);
-    free(i_kseqsBatch.kseqs[i]->qual.s);
+    kseq2bseq(i_kseqsBatch.kseqs_buf.ks+i, m_seqs + i, l_withQual, l_withComment);
   }
-  for (int i = 0; i < i_kseqsBatch.m_numSeq; i++) {
-    free(i_kseqsBatch.kseqs[i]);
-  }
-  free(i_kseqsBatch.kseqs);
+
+  kseq_queue.push(i_kseqsBatch.kseqs_buf);
 
   o_seqsBatch.m_startSeqIdx = i_kseqsBatch.m_startSeqIdx;
   o_seqsBatch.m_batchIdx = i_kseqsBatch.m_batchIdx;
