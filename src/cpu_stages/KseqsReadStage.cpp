@@ -129,8 +129,8 @@ void KseqsRead::compute() {
           kseqs[kseqs_i].f = kss[i];
           if (kseq_read(kseqs+kseqs_i) >= 0) {
             n_read ++;
-            kseqs_i ++;
             size += kseqs[kseqs_i].seq.l;
+            kseqs_i ++;
           }
         }
         if (n_read < m_numFp) {
@@ -139,6 +139,7 @@ void KseqsRead::compute() {
           }
           break;
         }
+        DLOG_IF(INFO, VLOG_IS_ON(4)) << "kseqs_i " << kseqs_i;
         DLOG_IF(INFO, VLOG_IS_ON(4)) << "size " << size << " g_mnmpOpt->mini_batch_size " << g_mnmpOpt->mini_batch_size;
         if (size >= g_mnmpOpt->mini_batch_size) {
           break;
@@ -161,8 +162,8 @@ void KseqsRead::compute() {
         if (kseq_read(kseqs + kseqs_i) < 0) {
           break;
         }
-        kseqs_i ++;
         size += kseqs[kseqs_i].seq.l;
+        kseqs_i ++;
       }
       if (kseqs_i >= g_mnmpOpt->mini_batch_size) {
         if (l_fragMode && kseqs[kseqs_i-1].seq.l < CHECK_PAIR_THRES) {
@@ -174,8 +175,8 @@ void KseqsRead::compute() {
                 kseqs = (kseq_t * )realloc(kseqs, buf_tmp.size*sizeof(kseq_t));
               }
               kseq_mov(tmp_kseq, kseqs+kseqs_i);
-              kseqs_i ++;
               size += kseqs[kseqs_i].seq.l;
+              kseqs_i ++;
             }
             else {
               break;

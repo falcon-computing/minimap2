@@ -8,3 +8,4 @@
 mappy.c
 build
 build/*
+build*
