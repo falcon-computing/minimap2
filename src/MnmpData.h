@@ -7,8 +7,32 @@
 #include "mmpriv.h"
 #include "minimap.h"
 #include "htslib/sam.h"
+#include "kseq.h"
+#include "kflow/Queue.h"
 
 #include "BamFileBuffer.h"
+#include "MnmpStagesCommon.h"
+
+KSEQ_INIT2(static , gzFile, gzread)
+
+// Data structure for kseqs read circulate memory
+struct kseq_buf
+{
+  kseq_t * ks;
+  int size;
+};
+
+// Kseq_queue for circulate memory
+extern kestrelFlow::Queue<kseq_buf, INPUT_DEPTH + 1> kseq_queue;
+
+//Data structure for kseqsRead and bseqsRead
+struct KseqsBatch
+{
+  int m_startSeqIdx;
+  int m_batchIdx;
+  int m_numSeq;
+  kseq_buf kseqs_buf;
+};
 
 //Data structure for sort-merge pipe
 struct BamRecord {

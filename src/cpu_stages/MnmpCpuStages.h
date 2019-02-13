@@ -22,4 +22,7 @@
 #include "BamSortStage.h"
 #include "BamWriteStage.h"
 
+#include "KseqsReadStage.h"
+#include "KseqsToBseqsStage.h"
+
 #endif
