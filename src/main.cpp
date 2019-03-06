@@ -336,8 +336,8 @@ int main(int argc, char *argv[]) {
     BamReadStage      bamread_stage(FLAGS_temp_dir, g_bamHeader, FLAGS_t);
     BamSortStage      bamsort_stage(FLAGS_t);
     BamWriteStage     bamwrite_stage(
-        FLAGS_num_buckets + (!FLAGS_filter_unmap),
-        FLAGS_temp_dir, FLAGS_output, g_bamHeader, FLAGS_t);
+        FLAGS_num_buckets + (!FLAGS_filter_unmap), FLAGS_temp_dir, 
+        FLAGS_output, g_bamHeader, FLAGS_t);
 
     sort_pipeline.addStage(0, &indexgen_stage);
     sort_pipeline.addStage(1, &bamread_stage);

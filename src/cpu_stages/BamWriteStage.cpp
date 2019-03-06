@@ -75,13 +75,14 @@ BamWriteStage::~BamWriteStage() {
   // TODO: check if the command will be too long
   // if so, we need to cat separately to append
   std::stringstream ss;
-  ss << "cat " << bam_dir_ << "/header ";
+  ss << "cd " << bam_dir_ << " && ";
+  ss << "cat " << "./header ";
   for (int i = 0; i < num_parts_; ++i) {
-    ss << bam_dir_ << "/part-" 
+    ss << "./part-" 
        << std::setw(6) << std::setfill('0') << i
        << " ";
   }
-  ss << "> " << output_path_;
+  ss << "> " << boost::filesystem::absolute(output_path_).string();
 
   //uint64_t start_ts = getUs();
 
