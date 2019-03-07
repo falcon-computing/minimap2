@@ -7,33 +7,30 @@ cmake_minimum_required(VERSION 2.8.12)
 
 project(minimap-flow)
 
-
 # set up dependency
-find_package( Boost 1.53.0 REQUIRED
-              COMPONENTS system thread chrono iostreams filesystem regex )
-find_package( ZLIB         REQUIRED )
-find_package( Threads      REQUIRED )
-
+find_package(Boost 1.53.0 REQUIRED
+             COMPONENTS system thread chrono iostreams filesystem regex)
+find_package(ZLIB     REQUIRED)
+find_package(Threads  REQUIRED)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_package( Google       REQUIRED )
-find_package( FalconLM     REQUIRED )
-find_package( HTS        REQUIRED )
+find_package(Google   REQUIRED)
+find_package(FalconLM REQUIRED)
+find_package(HTS      REQUIRED)
+find_package(Xilinx)
 
 # build option
-option( USE_FPGA   "Build with FPGA"                        ON )
+option( USE_FPGA   "Build with FPGA"                        OFF )
 option( USE_BLAZE  "Build with Blaze"                       ON )
 option( USE_NATIVE "Build with native FPGA routines"        OFF)
 option( USE_CKERNEL   "Build with original C code for kernels" OFF)
 # priority: USE_BLAZE < USE_NATIVE < USE_CKERNEL
 
-if ( DEFINED ENV{XILINX_SDX} AND USE_FPGA)
- set( USE_FPGA On )
- set( FPGA_TYPE "xlnx" )
- find_package( Xilinx REQUIRED )
- set( FPGA_INCLUDE_DIRS "${Xilinx_INCLUDE_DIRS}" )
- set( FPGA_LIBRARY_DIRS "${Xilinx_LIBRARY_DIRS}")
- set( FPGA_LIBRARIES "${Xilinx_LIBRARIES}")
+if (XilinxOCL_FOUND AND USE_FPGA)
+ set(FPGA_TYPE "xlnx" )
+ set(FPGA_INCLUDE_DIRS "${Xilinx_INCLUDE_DIRS}" )
+ set(FPGA_LIBRARY_DIRS "${Xilinx_LIBRARY_DIRS}")
+ set(FPGA_LIBRARIES "${Xilinx_LIBRARIES}")
 #elseif ( DEFINED ENV{ALTERAOCLSDKROOT} AND USE_FPGA)
 #  set( USE_FPGA On )
 #  set( FPGA_TYPE "intel" )
