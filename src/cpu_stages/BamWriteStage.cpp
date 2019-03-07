@@ -80,10 +80,9 @@ BamWriteStage::~BamWriteStage() {
   std::string ab_output = std::string(path_buf);
 
   std::stringstream ss;
-  ss << "cd " << bam_dir_ << " && ";
-  ss << "cat " << "./header ";
+  ss << "cat " << bam_dir_ << "/header ";
   for (int i = 0; i < num_parts_; ++i) {
-    ss << "./part-" 
+    ss << bam_dir_ << "/part-" 
        << std::setw(6) << std::setfill('0') << i
        << " ";
   }
