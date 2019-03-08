@@ -68,14 +68,16 @@ class BucketSortStage : public
   void closeFiles();
 
  private:
-  int get_bucket_id(bam1_t* read);
-
   int num_buckets_;
-  int bucket_size_;
-  bam_hdr_t* head_;
+  int64_t bucket_size_;
   std::unordered_map<int32_t, bucketFile*> buckets_;
   std::vector<int64_t> accumulate_length_;
+  bam_hdr_t* head_;
   htsFormat fmt_;
+
+  int get_bucket_id(bam1_t* read);
+  int bucket_id_calculate(int32_t contig_id, int32_t read_pos);
+  std::vector<std::vector<int64_t>> get_intervals(int64_t start, int64_t end);
 };
 
 #endif
