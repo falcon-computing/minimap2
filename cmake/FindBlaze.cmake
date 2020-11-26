@@ -1,6 +1,6 @@
 ExternalProject_Add(blaze-download
     PREFIX "blaze"
-    URL https://s3.amazonaws.com/fcs-build-public/blaze-latest.tgz
+    URL ${CMAKE_SOURCE_DIR}/deps/blaze-latest.tgz
     SOURCE_DIR "${CMAKE_BINARY_DIR}/blaze/install"
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""

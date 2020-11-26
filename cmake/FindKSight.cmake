@@ -1,6 +1,6 @@
 ExternalProject_Add(ksight-download
     PREFIX "falconlm"
-    URL https://s3.amazonaws.com/fcs-build-public/ksight.tgz
+    URL ${CMAKE_SOURCE_DIR}/deps/ksight.tgz
     CONFIGURE_COMMAND ""
     SOURCE_DIR "${CMAKE_BINARY_DIR}/ksight/install"
     BUILD_COMMAND ""
