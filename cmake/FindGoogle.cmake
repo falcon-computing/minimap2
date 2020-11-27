@@ -24,7 +24,7 @@ ExternalProject_Add(googletest-download
 
 ExternalProject_Add(protobuf-download
     PREFIX "protobuf"
-    URL ${CMAKE_SOURCE_DIR}/deps/protobuf-2.5.0.tar.gz
+    URL ${DEPS}/protobuf-2.5.0.tar.gz
     SOURCE_DIR "${CMAKE_BINARY_DIR}/protobuf/install"
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
