@@ -32,7 +32,6 @@
 #endif
 #endif
 
-#include "falcon-lic/genome.h"
 #include "MnmpGlobal.h"
 
 #include "MnmpUtils.h"
@@ -72,13 +71,6 @@ int main(int argc, char *argv[]) {
 
   // Print arguments for records
   DLOG(INFO) << l_cmdStr.str();
-
-  int licret = 0;
-  if (0 != (licret = license_verify())) {
-    LOG(ERROR) << "Cannot authorize software usage: " << licret;
-    LOG(ERROR) << "Please contact support@falcon-computing.com for details.";
-    return -1;
-  }
 
   // Check arguments for input
   if (argc < 2) {
