@@ -2,7 +2,7 @@ file(GLOB_RECURSE MM_TEST_LIST src/*.cpp)
 
 add_executable(test_minimap ${MM_TEST_LIST} ${MM_SRC_LIST})
 
-add_dependencies(test_minimap Google FalconLM HTS)
+add_dependencies(test_minimap Google HTS)
 
 
 if ( USE_FPGA )
@@ -11,7 +11,6 @@ if ( USE_FPGA )
     minimap-c
     numa
     ${Boost_LIBRARIES} 
-    ${FalconLM_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     ${ZLIB_LIBRARIES}
     ${CMAKE_DL_LIBS}
@@ -26,7 +25,6 @@ else()
     minimap-c
     numa
     ${Boost_LIBRARIES} 
-    ${FalconLM_LIBRARIES}
     ${Google_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     ${ZLIB_LIBRARIES}

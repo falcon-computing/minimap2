@@ -15,7 +15,6 @@ find_package(Threads  REQUIRED)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(Google   REQUIRED)
-find_package(FalconLM REQUIRED)
 find_package(HTS      REQUIRED)
 find_package(Xilinx)
 
@@ -123,13 +122,11 @@ link_directories( ./minimap2 )
 
 include_directories(
   ${Google_INCLUDE_DIRS}
-  ${FalconLM_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
   ${HTS_INCLUDE_DIRS})
 
 link_directories(
   ${Google_LIBRARY_DIRS}
-  ${FalconLM_LIBRARY_DIRS}
   ${Boost_LIBRARY_DIRS}
   ${HTS_LIBRARY_DIRS})
 
@@ -145,7 +142,7 @@ add_executable(minimap-flow ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp ${MM_SRC_LI
 if ( USE_FPGA )
   add_dependencies(minimap-flow Blaze KSight)
 endif()
-add_dependencies(minimap-flow Google FalconLM HTS)
+add_dependencies(minimap-flow Google HTS)
 
 set (CMAKE_STATIC_LINKER_FLAGS "--as-needed")
 
@@ -155,7 +152,6 @@ if ( USE_FPGA )
     kflow
     numa
     ${Boost_LIBRARIES} 
-    ${FalconLM_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     ${ZLIB_LIBRARIES}
     ${CMAKE_DL_LIBS}
@@ -170,7 +166,6 @@ else()
     kflow 
     numa
     ${Boost_LIBRARIES} 
-    ${FalconLM_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     ${ZLIB_LIBRARIES}
     ${CMAKE_DL_LIBS}
